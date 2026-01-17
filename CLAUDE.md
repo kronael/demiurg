@@ -40,7 +40,7 @@ if task.status is TaskStatus.PENDING:  # use 'is' not ==
 ### config loading
 - uses python-dotenv (not manual parsing)
 - loads global then local (local overrides)
-- raises RuntimeError if CLAUDE_API_KEY missing
+- no API key needed (uses claude code CLI session)
 
 ### continuation flow
 ```python
@@ -51,12 +51,13 @@ if args.cont:
         await queue.put(task)
 ```
 
-### worker implementation (TODO)
-currently mocked in worker.py:_do_work(). real implementation should:
-- use CLAUDE_API_KEY from config
-- call claude API with task.description + codebase context
-- write/modify files based on response
-- return actual changes made
+### worker implementation
+calls claude code CLI directly (worker.py:_do_work()):
+- spawns `claude -p <task.description> --model sonnet`
+- runs in cfg.target_dir (current working directory)
+- 30s timeout per task
+- claude code has full tool access (read/write files, bash, etc)
+- returns stdout from claude CLI
 
 ## shocking patterns
 
@@ -136,11 +137,9 @@ state written on every change (within lock).
 3. ./.demiurg (local project)
 4. environment variables (highest)
 
-required:
-- CLAUDE_API_KEY (no default)
-
-optional (with defaults):
+all optional (with defaults):
 - NUM_WORKERS=4
+- NUM_PLANNERS=2 (unused in current implementation)
 - TARGET_DIR=.
 - LOG_DIR=~/.demiurg/log
 - DATA_DIR=~/.demiurg/data

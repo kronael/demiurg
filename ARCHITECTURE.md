@@ -18,7 +18,7 @@ design.txt → Planner → [task, task, task] → Queue
 
 ### planner
 
-reads design file, breaks into tasks using LLM (currently mocked).
+reads design file, breaks into tasks (currently mocked).
 
 runs once at startup. generates tasks with:
 - unique id (uuid)
@@ -27,6 +27,8 @@ runs once at startup. generates tasks with:
 - status (pending)
 
 adds tasks to state and submits to queue.
+
+TODO: call claude code CLI to parse design file into tasks.
 
 ### queue
 
@@ -42,9 +44,9 @@ fetches tasks from queue, executes them, updates state.
 
 execution flow:
 1. mark task as running
-2. call LLM with task description + codebase context (currently mocked - sleeps 1s)
-3. write/modify files based on response
-4. mark task as completed with result
+2. spawn `claude -p <task.description> --model sonnet` in TARGET_DIR
+3. claude code has full tool access (read/write files, bash, grep, etc)
+4. mark task as completed with claude's stdout
 
 on error: mark task as failed with error message.
 
@@ -177,14 +179,13 @@ work.json:
 
 uses python-dotenv to load .env files.
 
-defaults:
-- claude_api_key: (required, no default)
+defaults (all optional):
 - num_workers: 4
-- num_planners: 2
+- num_planners: 2 (unused)
 - target_dir: "."
 - log_dir: ~/.demiurg/log
 - data_dir: ~/.demiurg/data
-- port: 8080
+- port: 8080 (unused)
 
 ## logging
 
@@ -202,10 +203,15 @@ compared to cursor's blog post, this implementation omits:
 - multiple planners (single planner at startup)
 - cycles (runs once until complete)
 - git operations (checkout, commit, push)
-- real llm integration (workers currently mocked)
 - queue persistence (regenerated from state)
 - conflict resolution
 - dynamic task prioritization
 - multi-node coordination
+
+implementation status:
+- workers: call claude code CLI (full implementation)
+- planner: mocked (TODO: call claude code CLI to parse design file)
+- judge: complete
+- state: complete
 
 these simplifications make the system suitable for learning the pattern, not production use.

@@ -60,6 +60,26 @@ class Worker:
             )
 
     async def _do_work(self, task: Task) -> str:
-        """execute task (mock implementation)"""
-        await asyncio.sleep(1)
-        return f"completed: {task.description}"
+        """execute task by calling claude code CLI"""
+        proc = await asyncio.create_subprocess_exec(
+            "claude",
+            "-p",
+            task.description,
+            "--model",
+            "sonnet",
+            cwd=self.cfg.target_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            error = stderr.decode().strip() or stdout.decode().strip()
+            raise RuntimeError(f"claude CLI failed: {error}")
+
+        output = stdout.decode().strip()
+        if not output:
+            raise RuntimeError("claude CLI returned empty output")
+
+        return output

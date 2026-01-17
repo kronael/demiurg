@@ -32,6 +32,11 @@ demiurg -c
 
 runs until goal satisfied, then exits. no daemon, no http server.
 
+## requirements
+
+- claude code CLI installed and authenticated
+- run `claude --version` to verify
+
 ## configuration
 
 loads from (highest priority first):
@@ -39,19 +44,19 @@ loads from (highest priority first):
 2. ./.demiurg (local project)
 3. ~/.demiurg/config (global)
 
-.env format:
+.env format (all optional):
 ```bash
-CLAUDE_API_KEY=sk-...
 NUM_WORKERS=4
+TARGET_DIR=.
 ```
-
-only CLAUDE_API_KEY required.
 
 ## architecture
 
 goal-oriented execution:
 1. planner reads design file, generates tasks (once at start)
 2. workers execute tasks in parallel (4 by default)
+   - each worker spawns `claude -p <task> --model sonnet`
+   - claude code has full tool access (read/write files, bash, etc)
 3. judge polls completion every 5s, exits when done
 
 state persisted to ~/.demiurg/data (tasks.json, work.json).

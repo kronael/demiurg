@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 @dataclass(frozen=True, slots=True)
 class Config:
-    claude_api_key: str
     num_planners: int
     num_workers: int
     target_dir: str
@@ -33,10 +32,6 @@ class Config:
         except Exception as e:
             raise RuntimeError(f"failed to load config files: {e}") from e
 
-        api_key = os.getenv("CLAUDE_API_KEY", "")
-        if not api_key:
-            raise RuntimeError("CLAUDE_API_KEY not set")
-
         try:
             num_planners = int(os.getenv("NUM_PLANNERS", "2"))
             num_workers = int(os.getenv("NUM_WORKERS", "4"))
@@ -45,7 +40,6 @@ class Config:
             raise RuntimeError(f"invalid config value: {e}") from e
 
         return Config(
-            claude_api_key=api_key,
             num_planners=num_planners,
             num_workers=num_workers,
             target_dir=os.getenv("TARGET_DIR", "."),
