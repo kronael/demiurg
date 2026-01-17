@@ -5,7 +5,7 @@ import uuid
 
 from demiurg.config import Config
 from demiurg.state import StateManager
-from demiurg.types_demiurg import Task, TaskStatus
+from demiurg.types_ import Task, TaskStatus
 
 
 class Planner:

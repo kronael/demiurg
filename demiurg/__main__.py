@@ -10,7 +10,7 @@ from demiurg.config import Config
 from demiurg.judge import Judge
 from demiurg.planner import Planner
 from demiurg.state import StateManager
-from demiurg.types_demiurg import Task
+from demiurg.types_ import Task
 from demiurg.worker import Worker
 
 
