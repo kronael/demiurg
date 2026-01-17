@@ -1,0 +1,7 @@
+main
+log/
+tmp/
+data/
+*.log
+__pycache__/
+*.pyc

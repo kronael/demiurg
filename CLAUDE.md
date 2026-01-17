@@ -1,0 +1,149 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+autonomous agent orchestration implementing cursor's planner-worker-judge pattern for goal-oriented code generation.
+
+## build and run
+
+```bash
+make build              # uv sync (install deps)
+make install            # install as uv tool
+make test               # pytest
+make right              # pyright + pytest
+make clean              # remove cache and state
+```
+
+run from git:
+```bash
+uvx github.com/kronael/demiurg design.txt
+```
+
+run locally:
+```bash
+demiurg design.txt      # new run
+demiurg -c              # continue from last run
+```
+
+## critical patterns
+
+### enum checking
+```python
+if task.status is TaskStatus.PENDING:  # use 'is' not ==
+```
+
+### state mutations
+- ALWAYS acquire lock before reading/writing state
+- ALWAYS call save() while holding write lock
+- ALWAYS copy data structures before returning (prevent mutation)
+
+### config loading
+- uses python-dotenv (not manual parsing)
+- loads global then local (local overrides)
+- raises RuntimeError if CLAUDE_API_KEY missing
+
+### continuation flow
+```python
+if args.cont:
+    await state.reset_interrupted_tasks()  # running → pending
+    pending = await state.get_pending_tasks()
+    for task in pending:
+        await queue.put(task)
+```
+
+### worker implementation (TODO)
+currently mocked in worker.py:_do_work(). real implementation should:
+- use CLAUDE_API_KEY from config
+- call claude API with task.description + codebase context
+- write/modify files based on response
+- return actual changes made
+
+## shocking patterns
+
+**judge exits (not continuous)**: judge task completes when goal satisfied, triggering main() to cancel workers and exit. no daemon mode, no http server - just runs until done.
+
+**no queue persistence**: queue regenerated from pending tasks on continuation. only task state persisted to disk.
+
+**single planner at startup**: planner runs once at startup to break design into tasks, then exits. no continuous planning, no cycles.
+
+**async locks everywhere**: state manager uses asyncio.Lock for all mutations. no sync primitives in async code.
+
+**in-memory queue**: asyncio.Queue used for task coordination. workers block on queue.get(), no polling.
+
+## architecture
+
+### entry point
+- `demiurg.__main__:run` is the entry point (defined in pyproject.toml)
+- `__main__.py` contains the actual implementation
+- `main.py` and `server.py` exist but are NOT used (old code, ignore them)
+
+### execution flow
+1. parse args (design file path or -c for continuation)
+2. load config from env/.demiurg files
+3. init state manager (loads from ~/.demiurg/data)
+4. if new run:
+   - planner.plan_once() parses design file into tasks
+   - state.init_work() creates work.json
+5. if continuation (-c):
+   - load existing work.json
+   - reset interrupted tasks (running → pending)
+6. populate queue from pending tasks
+7. spawn workers (default 4) and judge
+8. workers pull tasks from queue and execute
+9. judge polls every 5s, exits when all tasks complete
+10. main() cancels workers and exits
+
+### task states
+explicit enum in types.py:
+- PENDING: created, not started
+- RUNNING: worker executing
+- COMPLETED: finished successfully
+- FAILED: error during execution
+
+transitions:
+- pending → running (worker starts)
+- running → completed (success)
+- running → failed (error/timeout)
+- running → pending (continuation after interrupt)
+
+### state persistence
+all state at ~/.demiurg/data/:
+- tasks.json: array of all tasks with metadata
+- work.json: design_file, goal_text, is_complete
+
+state written on every change (within lock).
+
+### key files
+- `__main__.py`: entry point, orchestrates planner/workers/judge
+- `config.py`: load config from env/.demiurg files
+- `state.py`: StateManager with async locks for task/work persistence
+- `types.py`: Task, TaskStatus, WorkState dataclasses
+- `planner.py`: parse design file into tasks (runs once)
+- `worker.py`: execute tasks from queue (mocked, needs LLM integration)
+- `judge.py`: poll for completion every 5s, exit when done
+
+## package structure
+
+- package name: `demiurg`
+- command name: `demiurg`
+- internal module: `demiurg/` (no __init__.py needed)
+- entry point: `demiurg.__main__:run`
+
+## config precedence
+
+1. defaults (hardcoded in config.py)
+2. ~/.demiurg/config (global)
+3. ./.demiurg (local project)
+4. environment variables (highest)
+
+required:
+- CLAUDE_API_KEY (no default)
+
+optional (with defaults):
+- NUM_WORKERS=4
+- TARGET_DIR=.
+- LOG_DIR=~/.demiurg/log
+- DATA_DIR=~/.demiurg/data
+- PORT=8080 (unused in current implementation)
+
+note: NUM_PLANNERS exists in config.py but is NOT used in __main__.py (only used in old main.py).

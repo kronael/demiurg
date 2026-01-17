@@ -1,0 +1,5 @@
+# Test Design
+
+- Create a simple hello world function
+- Add tests for the function
+- Add documentation
