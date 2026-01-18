@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from typing import AsyncIterator
 
 
 class ClaudeCodeClient:
-    """client for calling claude code CLI"""
+    """client for calling claude code CLI
 
-    def __init__(self, model: str = "sonnet", cwd: str = "."):
+    spawns claude CLI subprocess and handles communication
+    supports both buffered (execute) and streaming (execute_stream) modes
+    """
+
+    def __init__(self, model: str = "sonnet", cwd: str = ".", permission_mode: str = "acceptEdits"):
         self.model = model
         self.cwd = cwd
+        self.permission_mode = permission_mode
 
     async def execute(
         self, prompt: str, timeout: int = 120
@@ -30,6 +36,8 @@ class ClaudeCodeClient:
             prompt,
             "--model",
             self.model,
+            "--permission-mode",
+            self.permission_mode,
             cwd=self.cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -42,8 +50,8 @@ class ClaudeCodeClient:
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"error cleaning up process after timeout: {e}")
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
         if proc.returncode != 0:
@@ -70,6 +78,8 @@ class ClaudeCodeClient:
             prompt,
             "--model",
             self.model,
+            "--permission-mode",
+            self.permission_mode,
             cwd=self.cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -79,7 +89,9 @@ class ClaudeCodeClient:
 
         try:
             async with asyncio.timeout(timeout):
-                assert proc.stdout is not None
+                if proc.stdout is None:
+                    raise RuntimeError("claude CLI stdout is None")
+
                 while True:
                     line = await proc.stdout.readline()
                     if not line:
@@ -94,8 +106,8 @@ class ClaudeCodeClient:
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"error cleaning up process after timeout: {e}")
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
         if proc.returncode != 0:

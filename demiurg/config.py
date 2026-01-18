@@ -31,7 +31,20 @@ class Config:
         except ValueError as e:
             raise RuntimeError(f"invalid config value: {e}") from e
 
+        # validate positive integers
+        if num_planners < 1:
+            raise RuntimeError(f"NUM_PLANNERS must be positive, got {num_planners}")
+        if num_workers < 1:
+            raise RuntimeError(f"NUM_WORKERS must be positive, got {num_workers}")
+        if port < 1 or port > 65535:
+            raise RuntimeError(f"PORT must be 1-65535, got {port}")
+
         target_dir = os.getenv("TARGET_DIR", ".")
+        target_path = Path(target_dir)
+        if not target_path.exists():
+            raise RuntimeError(f"TARGET_DIR does not exist: {target_dir}")
+        if not target_path.is_dir():
+            raise RuntimeError(f"TARGET_DIR is not a directory: {target_dir}")
 
         return Config(
             num_planners=num_planners,

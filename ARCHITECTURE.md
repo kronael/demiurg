@@ -176,11 +176,11 @@ work.json:
 ## configuration precedence
 
 1. defaults (hardcoded in config.py)
-2. ~/.demiurg/config (global .env file, optional)
-3. ./.demiurg (local project .env file, optional)
-4. environment variables (highest priority)
+2. ./.env (project-local .env file, optional)
+3. environment variables (highest priority, override .env)
 
-uses python-dotenv to load .env files.
+uses python-dotenv to load .env files from project root only.
+no global config files - all config is project-local.
 
 defaults (all optional):
 - num_workers: 4
@@ -192,7 +192,7 @@ defaults (all optional):
 
 ## logging
 
-unix format: "2026/01/16 08:00:00"
+unix format: "Jan 18 10:34:26"
 
 logs to: {target_dir}/.demiurg/log/demiurg.log (project-local)
 

@@ -11,6 +11,7 @@ from demiurg.types_ import Task, TaskStatus
 
 
 class Planner:
+    """breaks down design files into executable tasks using claude code CLI"""
     def __init__(self, cfg: Config, state: StateManager):
         self.cfg = cfg
         self.state = state

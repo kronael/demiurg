@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class TaskStatus(str, Enum):
+    """task execution states"""
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -14,6 +16,7 @@ class TaskStatus(str, Enum):
 
 @dataclass(slots=True)
 class Task:
+    """represents a single executable task"""
     id: str
     description: str
     files: list[str]
@@ -24,8 +27,8 @@ class Task:
     error: str = ""
     result: str = ""
 
-    def to_dict(self):
-        d = {
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
             "id": self.id,
             "description": self.description,
             "files": self.files,
@@ -43,13 +46,14 @@ class Task:
 
 @dataclass(slots=True)
 class WorkState:
+    """tracks overall work progress and goal state"""
     design_file: str
     goal_text: str
     is_complete: bool = False
     started_at: datetime = field(default_factory=datetime.now)
     last_updated_at: datetime = field(default_factory=datetime.now)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return {
             "design_file": self.design_file,
             "goal_text": self.goal_text,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from demiurg.config import Config
 from demiurg.judge import Judge
 from demiurg.planner import Planner
 from demiurg.state import StateManager
-from demiurg.types_ import Task
+from demiurg.types_ import Task, TaskStatus
 from demiurg.worker import Worker
 
 
@@ -35,7 +36,7 @@ async def main() -> None:
         filename=f"{cfg.log_dir}/demiurg.log",
         level=logging.INFO,
         format="%(asctime)s %(message)s",
-        datefmt="%Y/%m/%d %H:%M:%S",
+        datefmt="%b %d %H:%M:%S",
     )
 
     logging.info("starting demiurg")
@@ -93,7 +94,7 @@ async def main() -> None:
 
     all_tasks = await state.get_all_tasks()
     total = len(all_tasks)
-    completed = len([t for t in all_tasks if t.status.value == "completed"])
+    completed = len([t for t in all_tasks if t.status is TaskStatus.COMPLETED])
 
     # adjust worker count to task count (no more workers than tasks)
     num_workers = min(cfg.num_workers, len(pending))
@@ -119,8 +120,8 @@ async def main() -> None:
     await asyncio.gather(*worker_tasks, return_exceptions=True)
 
     final_tasks = await state.get_all_tasks()
-    completed = len([t for t in final_tasks if t.status.value == "completed"])
-    failed = len([t for t in final_tasks if t.status.value == "failed"])
+    completed = len([t for t in final_tasks if t.status is TaskStatus.COMPLETED])
+    failed = len([t for t in final_tasks if t.status is TaskStatus.FAILED])
 
     logging.info("goal satisfied")
     print(f"\ngoal satisfied: {completed}/{total} completed, {failed} failed")
@@ -128,6 +129,12 @@ async def main() -> None:
 
 def run() -> None:
     """entry point for uvx/installed command"""
+    # handle SIGTERM gracefully
+    def handle_sigterm(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

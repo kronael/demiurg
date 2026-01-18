@@ -55,21 +55,22 @@ if args.cont:
 
 ### planner implementation
 uses ClaudeCodeClient to parse design files:
-- calls `claude -p <prompt> --model sonnet` with JSON output request
-- prompt asks for actionable tasks with priority/complexity
-- parses JSON array of tasks
-- falls back to simple line-based parsing on error
+- calls `claude -p <prompt> --model sonnet --permission-mode acceptEdits`
+- prompt asks for JSON array with description/priority/complexity
+- parses JSON response into Task objects
+- falls back to simple line-based parsing on error (_simple_parse)
+- fallback: strips bullets/asterisks/headings, creates tasks from lines >5 chars
 - 60s timeout for parsing
 
 ### worker implementation
 uses ClaudeCodeClient (claude_code.py):
 - client isolated in claude_code.py for reuse as library
-- spawns `claude -p <prompt> --model sonnet`
+- spawns `claude -p <prompt> --model sonnet --permission-mode acceptEdits`
 - runs in cfg.target_dir (current working directory)
-- 30s timeout per task (configurable in client)
+- 60s timeout per task (wrapped in asyncio.timeout)
 - claude code has full tool access (read/write files, bash, etc)
-- returns stdout from claude CLI
-- worker.py:_do_work() is now single line: self.claude.execute()
+- streams output line-by-line using execute_stream()
+- worker.py:_do_work() calls claude.execute_stream() and prints each line
 
 ## shocking patterns
 
@@ -82,6 +83,12 @@ uses ClaudeCodeClient (claude_code.py):
 **async locks everywhere**: state manager uses asyncio.Lock for all mutations. no sync primitives in async code.
 
 **in-memory queue**: asyncio.Queue used for task coordination. workers block on queue.get(), no polling.
+
+**streaming output**: workers stream claude CLI output line-by-line during execution (not buffered until complete). prints in real-time prefixed with worker ID.
+
+**permission mode hardcoded**: claude CLI always called with `--permission-mode acceptEdits` to auto-approve file edits. no interactive prompts.
+
+**dynamic worker scaling**: adjusts worker count to task count at startup (min(cfg.num_workers, len(pending_tasks))). never spawns more workers than tasks.
 
 ## architecture
 
@@ -128,13 +135,13 @@ state written on every change (within lock).
 each project has isolated state in its own ./.demiurg/ directory.
 
 ### key files
-- `__main__.py`: entry point, orchestrates planner/workers/judge
+- `__main__.py`: entry point, orchestrates planner/workers/judge (130 lines)
 - `config.py`: load config from environment variables
-- `state.py`: StateManager with async locks for task/work persistence
+- `state.py`: StateManager with async locks for task/work persistence (162 lines)
 - `types_.py`: Task, TaskStatus, WorkState dataclasses (underscore avoids masking built-in types)
-- `planner.py`: parse design file into tasks (runs once)
-- `worker.py`: execute tasks from queue using ClaudeCodeClient
-- `claude_code.py`: isolated client for calling claude code CLI (reusable)
+- `planner.py`: parse design file into tasks using Claude CLI (120 lines)
+- `worker.py`: execute tasks from queue using ClaudeCodeClient (75 lines)
+- `claude_code.py`: isolated client for calling claude code CLI (112 lines, reusable as library)
 - `judge.py`: poll for completion every 5s, exit when done
 
 ## package structure

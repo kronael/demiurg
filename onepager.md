@@ -1,5 +1,7 @@
 # demiurg: autonomous coding agent
 
+> **[→ view beautiful presentation version](onepager.html)** - includes mythological context and visual design
+
 Reads design file, breaks into tasks, executes in parallel using Claude Code CLI, exits when complete.
 
 ## what it does

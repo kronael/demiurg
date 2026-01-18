@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+from copy import copy
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from demiurg.types_ import Task, TaskStatus, WorkState
 
 
 class StateManager:
+    """manages task and work state with async locks for safe concurrent access"""
     def __init__(self, data_dir: str):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -101,6 +104,7 @@ class StateManager:
     ) -> None:
         async with self.lock:
             if task_id not in self.tasks:
+                logging.warning(f"attempted to update non-existent task: {task_id}")
                 return
 
             task = self.tasks[task_id]
@@ -129,11 +133,11 @@ class StateManager:
 
     async def get_pending_tasks(self) -> list[Task]:
         async with self.lock:
-            return list(t for t in self.tasks.values() if t.status is TaskStatus.PENDING)
+            return [copy(t) for t in self.tasks.values() if t.status is TaskStatus.PENDING]
 
     async def get_all_tasks(self) -> list[Task]:
         async with self.lock:
-            return list(self.tasks.values())
+            return [copy(t) for t in self.tasks.values()]
 
     async def is_complete(self) -> bool:
         async with self.lock:

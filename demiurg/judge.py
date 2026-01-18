@@ -7,6 +7,7 @@ from demiurg.state import StateManager
 
 
 class Judge:
+    """polls for task completion and exits when all tasks are done"""
     def __init__(self, state: StateManager):
         self.state = state
 

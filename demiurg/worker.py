@@ -10,6 +10,7 @@ from demiurg.types_ import Task, TaskStatus
 
 
 class Worker:
+    """executes tasks from queue using claude code CLI"""
     def __init__(self, worker_id: str, cfg: Config, state: StateManager):
         self.worker_id = worker_id
         self.cfg = cfg
@@ -37,8 +38,7 @@ class Worker:
         await self.state.update_task(task.id, TaskStatus.RUNNING)
 
         try:
-            async with asyncio.timeout(60):
-                result = await self._do_work(task)
+            result = await self._do_work(task)
 
             await self.state.update_task(
                 task.id, TaskStatus.COMPLETED, result=result
@@ -46,13 +46,18 @@ class Worker:
             print(f"[{self.worker_id}] ✓ completed")
             logging.info(f"{self.worker_id} completed: {task.description}")
 
-        except TimeoutError:
-            error_msg = "task timeout after 60s"
+        except RuntimeError as e:
+            # claude CLI errors (including timeout) come as RuntimeError
+            error_msg = str(e) if str(e) else type(e).__name__
             await self.state.update_task(
                 task.id, TaskStatus.FAILED, error=error_msg
             )
-            print(f"[{self.worker_id}] ✗ timeout")
-            logging.warning(f"{self.worker_id} {error_msg}: {task.description}")
+            if "timeout" in error_msg.lower():
+                print(f"[{self.worker_id}] ✗ timeout")
+                logging.warning(f"{self.worker_id} {error_msg}: {task.description}")
+            else:
+                print(f"[{self.worker_id}] ✗ {error_msg}")
+                logging.error(f"{self.worker_id} failed: {task.description}: {error_msg}")
 
         except Exception as e:
             error_msg = str(e) if str(e) else type(e).__name__

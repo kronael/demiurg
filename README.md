@@ -3,9 +3,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
+> **[→ view presentation](onepager.html)** - beautiful visual overview with mythological context and jokes
+
 autonomous coding agent using planner-worker-judge pattern.
 
-based on cursor's blog: https://cursor.com/blog/scaling-agents
+implements [cursor's battle-tested architecture](https://cursor.com/blog/scaling-agents) on the command line.
+they proved it scales. we made it portable. now you can vacation while your code writes itself.
 
 ## quick example
 
