@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>demiurg - autonomous coding agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #e0e0e0;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            font-size: 4rem;
+            font-weight: 300;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #00ff9d 0%, #00d4ff 50%, #00b4d8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 1.5rem;
+            color: #a0a0a0;
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+
+        .myth-ref {
+            font-size: 0.9rem;
+            color: #666;
+            font-style: italic;
+            margin-top: 1rem;
+        }
+
+        .hero {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            line-height: 1.8;
+            color: #c0c0c0;
+            margin-bottom: 1rem;
+        }
+
+        .hero p:last-child {
+            margin-bottom: 0;
+        }
+
+        .highlight {
+            color: #00d4ff;
+            font-weight: 500;
+        }
+
+        section {
+            margin-bottom: 3rem;
+        }
+
+        h2 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            color: #fff;
+            font-weight: 400;
+        }
+
+        h2::before {
+            content: "→ ";
+            color: #00d4ff;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .feature {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .feature:hover {
+            transform: translateY(-2px);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .feature h3 {
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .feature p {
+            color: #a0a0a0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        pre {
+            background: #0d1117;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        code {
+            color: #79c0ff;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .comparison {
+            margin: 2rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        th {
+            background: rgba(102, 126, 234, 0.1);
+            color: #00d4ff;
+            font-weight: 500;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .cta {
+            text-align: center;
+            margin: 4rem 0 2rem;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #00d4ff 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 3rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        footer {
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        footer a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>demiurg</h1>
+            <p class="subtitle">autonomous coding agent</p>
+            <p class="myth-ref">δημιουργός - the craftsman who shapes formless design into working code</p>
+        </header>
+
+        <div class="hero">
+            <p>
+                In ancient philosophy, the <span class="highlight">demiurge</span> was the divine craftsman who fashioned order from chaos,
+                transforming abstract forms into material reality. For millennia, philosophers could only theorize about this cosmic architect.
+            </p>
+            <p>
+                Now you can have one at home.
+            </p>
+            <p>
+                <span class="highlight">demiurg</span> reads your design specifications, breaks them into executable tasks,
+                and autonomously crafts working software through parallel execution. No supervision required. No babysitting. No "one more thing."
+            </p>
+            <p>
+                Finally, that Hawaiian vacation. (The Necrons already figured this out - eternal life means delegating the boring parts.)
+            </p>
+        </div>
+
+        <section>
+            <h2>what it does</h2>
+            <pre><code># create your design
+cat > design.txt &lt;&lt;EOF
+- create fastapi server with /health endpoint
+- add GET /users endpoint with pagination
+- add POST /users endpoint with validation
+- write pytest tests for all endpoints
+- add openapi documentation
+EOF
+
+# let demiurg craft it into being
+uvx github.com/kronael/demiurg design.txt
+
+# result: complete API server, tests, docs
+# built autonomously while you do other work</code></pre>
+        </section>
+
+        <section>
+            <h2>core principles</h2>
+            <div class="feature-grid">
+                <div class="feature">
+                    <h3>parallel execution</h3>
+                    <p>4 workers execute tasks simultaneously. because waiting is for mortals.</p>
+                </div>
+                <div class="feature">
+                    <h3>project isolation</h3>
+                    <p>each project has its own .demiurg/ state. run multiple demiurges. start a pantheon if you want.</p>
+                </div>
+                <div class="feature">
+                    <h3>continuation</h3>
+                    <p>interrupted mid-creation? demiurg -c picks up exactly where it left off. even the demiurge gets coffee breaks.</p>
+                </div>
+                <div class="feature">
+                    <h3>autonomous</h3>
+                    <p>runs to completion and exits. like a responsible deity: creates world, leaves detailed notes, doesn't hover.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>architecture</h2>
+            <p style="color: #a0a0a0; margin-bottom: 1.5rem;">
+                implements cursor's <a href="https://cursor.com/blog/scaling-agents" style="color: #00d4ff; text-decoration: none;">planner-worker-judge pattern</a>, proven at production scale
+            </p>
+            <p style="color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; font-style: italic;">
+                "We're not reinventing the wheel - we're putting Cursor's battle-tested architecture on the command line.
+                They figured out how to scale autonomous agents. We just made it something you can run while you're at the beach."
+            </p>
+            <div class="feature-grid">
+                <div class="feature">
+                    <h3>planner</h3>
+                    <p>reads your design, breaks it into atomic tasks. thinks once, clearly, at startup. no overthinking.</p>
+                </div>
+                <div class="feature">
+                    <h3>workers</h3>
+                    <p>4 parallel executors via Claude Code CLI. full tool access. they don't ask permission, they ask forgiveness (jk, they have --permission-mode acceptEdits).</p>
+                </div>
+                <div class="feature">
+                    <h3>judge</h3>
+                    <p>checks completion every 5s. when satisfied, exits cleanly. the most decisive code review you'll ever get.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="comparison">
+            <h2>vs alternatives</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>approach</th>
+                        <th>parallelization</th>
+                        <th>supervision</th>
+                        <th>state persistence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>manual coding</td>
+                        <td>none</td>
+                        <td>constant</td>
+                        <td>none</td>
+                    </tr>
+                    <tr>
+                        <td>chatgpt</td>
+                        <td>sequential only</td>
+                        <td>constant</td>
+                        <td>none</td>
+                    </tr>
+                    <tr>
+                        <td>cursor</td>
+                        <td>one task at a time</td>
+                        <td>per-task approval</td>
+                        <td>project files</td>
+                    </tr>
+                    <tr style="background: rgba(102, 126, 234, 0.05);">
+                        <td><strong>demiurg</strong></td>
+                        <td><strong>4 workers</strong></td>
+                        <td><strong>none</strong></td>
+                        <td><strong>.demiurg/</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>ideal for</h2>
+            <div class="feature-grid">
+                <div class="feature">
+                    <h3>boilerplate generation</h3>
+                    <p>APIs, CLIs, scripts. the stuff you could write in your sleep, so why not let demiurg write it while you sleep?</p>
+                </div>
+                <div class="feature">
+                    <h3>migrations</h3>
+                    <p>transform codebases, update APIs, refactor across files. the digital equivalent of organizing your garage, except you're on the couch.</p>
+                </div>
+                <div class="feature">
+                    <h3>test suites</h3>
+                    <p>comprehensive test coverage for existing code. yes, those tests you've been "meaning to write."</p>
+                </div>
+                <div class="feature">
+                    <h3>repetitive tasks</h3>
+                    <p>tedious work that follows a pattern. delegate it to your personal demiurge. gods don't do busywork.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="cta">
+            <a href="https://github.com/kronael/demiurg" class="cta-button">view on github</a>
+        </div>
+
+        <footer>
+            <p>
+                <strong>demiurg</strong> - from δημιουργός (dēmiourgos): craftsman, artisan, creator
+            </p>
+            <p style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                implementing <a href="https://cursor.com/blog/scaling-agents" style="color: #00d4ff;">cursor's planner-worker-judge pattern</a> on the command line
+            </p>
+            <p style="margin-top: 1rem;">
+                <a href="https://github.com/kronael/demiurg">github</a> ·
+                <a href="https://github.com/kronael/demiurg/blob/master/README.md">documentation</a> ·
+                MIT license
+            </p>
+            <p style="margin-top: 1rem; font-size: 0.85rem; color: #555;">
+                now go enjoy that vacation. you've earned it. ☀️
+            </p>
+        </footer>
+    </div>
+</body>
+</html>

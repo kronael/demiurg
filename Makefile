@@ -1,6 +1,4 @@
-.PHONY: build test smoke clean all run right image install
-
-all: build
+.PHONY: build test smoke clean run right image install
 
 build:
 	uv sync
