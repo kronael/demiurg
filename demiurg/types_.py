@@ -50,7 +50,7 @@ class WorkState:
     design_file: str
     goal_text: str
     is_complete: bool = False
-    skills: list[str] = field(default_factory=list)
+    project_context: str = ""  # brief description for workers
     started_at: datetime = field(default_factory=datetime.now)
     last_updated_at: datetime = field(default_factory=datetime.now)
 
@@ -59,7 +59,7 @@ class WorkState:
             "design_file": self.design_file,
             "goal_text": self.goal_text,
             "is_complete": self.is_complete,
-            "skills": self.skills,
+            "project_context": self.project_context,
             "started_at": self.started_at.isoformat(),
             "last_updated_at": self.last_updated_at.isoformat(),
         }

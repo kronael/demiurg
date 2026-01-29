@@ -11,6 +11,7 @@ import click
 from demiurg.config import Config
 from demiurg.judge import Judge
 from demiurg.planner import Planner
+from demiurg.refiner import Refiner
 from demiurg.state import StateManager
 from demiurg.types_ import Task, TaskStatus
 from demiurg.worker import Worker
@@ -139,17 +140,17 @@ async def _main(
     if num_workers < cfg.num_workers:
         logging.info(f"reducing workers from {cfg.num_workers} to {num_workers} (only {len(pending)} tasks)")
 
-    # get skills from work state
+    # get project context for workers
     work = state.get_work_state()
-    skills = work.skills if work else []
-    if skills:
-        click.echo(f"skills: {', '.join(skills)}")
+    project_context = work.project_context if work else ""
+    if project_context:
+        click.echo(f"context: {project_context[:80]}...")
 
     click.echo(f"progress: {completed}/{total} tasks completed")
     click.echo(f"workers: {num_workers}\n")
 
-    worker_list = [Worker(f"worker-{i}", cfg, state, skills=skills) for i in range(num_workers)]
-    judge = Judge(state)
+    worker_list = [Worker(f"worker-{i}", cfg, state, project_context=project_context) for i in range(num_workers)]
+    judge = Judge(state, queue, project_context=project_context)
 
     worker_tasks = [asyncio.create_task(w.run(queue)) for w in worker_list]
     judge_task = asyncio.create_task(judge.run())

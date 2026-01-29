@@ -26,7 +26,13 @@ class Planner:
 
         logging.info("breaking down goal into tasks")
 
-        tasks = await self._parse_tasks(work.goal_text)
+        # extract project context and tasks together
+        context, tasks = await self._parse_design(work.goal_text)
+
+        # store context for workers
+        if context:
+            await self.state.set_project_context(context)
+            logging.info(f"project context: {context[:100]}...")
 
         for task in tasks:
             await self.state.add_task(task)
@@ -34,42 +40,49 @@ class Planner:
 
         return tasks
 
-    async def _parse_tasks(self, goal: str) -> list[Task]:
-        """parse goal text into tasks using Claude"""
-        prompt = f"""Extract executable tasks from this design document.
+    async def _parse_design(self, goal: str) -> tuple[str, list[Task]]:
+        """parse design doc into context and tasks using Claude"""
+        prompt = f"""Analyze this design document and extract:
+1. A brief project context (what's being built, language/framework, purpose)
+2. Executable tasks
 
 <design>
 {goal}
 </design>
 
-Rules:
-- Each task must be a concrete, completable coding action
-- Task description starts with a verb (Create, Add, Implement, Write)
-- Skip explanations, examples, documentation sections
-- If there's a "Tasks" section, prioritize items from there
-- Consolidate related items into single tasks when sensible
+Output format - return ONLY this XML:
 
-Output format - return ONLY this XML, nothing else:
-
+<project>
+<context>Brief 1-2 sentence description of what's being built and key technologies</context>
 <tasks>
 <task>Create go.mod with module name and dependencies</task>
 <task>Implement HTTP server with health endpoint</task>
-</tasks>"""
+</tasks>
+</project>
+
+Rules for tasks:
+- Each task is a concrete, completable coding action
+- Task description starts with a verb (Create, Add, Implement, Write)
+- Skip explanations, examples, documentation
+- Consolidate related items when sensible"""
 
         try:
             result = await self.claude.execute(prompt, timeout=60)
             return self._parse_xml(result)
         except RuntimeError as e:
             logging.warning(f"claude parsing failed: {e}")
-            return []
+            return "", []
 
-    def _parse_xml(self, text: str) -> list[Task]:
-        """extract tasks from XML response"""
+    def _parse_xml(self, text: str) -> tuple[str, list[Task]]:
+        """extract context and tasks from XML response"""
+        # extract context
+        context_match = re.search(r"<context>(.*?)</context>", text, re.DOTALL)
+        context = context_match.group(1).strip() if context_match else ""
+
+        # extract tasks
         tasks = []
-
-        # find all <task>...</task> elements
-        pattern = r"<task>(.*?)</task>"
-        matches = re.findall(pattern, text, re.DOTALL)
+        task_pattern = r"<task>(.*?)</task>"
+        matches = re.findall(task_pattern, text, re.DOTALL)
 
         for desc in matches:
             desc = desc.strip()
@@ -82,4 +95,4 @@ Output format - return ONLY this XML, nothing else:
                 )
                 tasks.append(task)
 
-        return tasks
+        return context, tasks
