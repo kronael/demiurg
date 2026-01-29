@@ -17,7 +17,7 @@ class ClaudeCodeClient:
         self,
         model: str = "sonnet",
         cwd: str = ".",
-        permission_mode: str = "acceptEdits",
+        permission_mode: str = "bypassPermissions",
         max_turns: int | None = None,
     ):
         self.model = model
