@@ -13,17 +13,56 @@ class ClaudeCodeClient:
     supports both buffered (execute) and streaming (execute_stream) modes
     """
 
+    # common dev tools to allow in sandbox
+    DEFAULT_ALLOWED_TOOLS = [
+        "Bash(make:*)",
+        "Bash(go:*)",
+        "Bash(npm:*)",
+        "Bash(npx:*)",
+        "Bash(node:*)",
+        "Bash(python:*)",
+        "Bash(python3:*)",
+        "Bash(uv:*)",
+        "Bash(pytest:*)",
+        "Bash(cargo:*)",
+        "Bash(rustc:*)",
+        "Bash(grep:*)",
+        "Bash(sed:*)",
+        "Bash(awk:*)",
+        "Bash(find:*)",
+        "Bash(cat:*)",
+        "Bash(head:*)",
+        "Bash(tail:*)",
+        "Bash(ls:*)",
+        "Bash(mkdir:*)",
+        "Bash(rm:*)",
+        "Bash(cp:*)",
+        "Bash(mv:*)",
+        "Bash(chmod:*)",
+        "Bash(git:*)",
+        "Bash(curl:*)",
+        "Bash(tar:*)",
+        "Bash(unzip:*)",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+    ]
+
     def __init__(
         self,
         model: str = "sonnet",
         cwd: str = ".",
         permission_mode: str = "bypassPermissions",
         max_turns: int | None = None,
+        allowed_tools: list[str] | None = None,
     ):
         self.model = model
         self.cwd = cwd
         self.permission_mode = permission_mode
         self.max_turns = max_turns
+        self.allowed_tools = allowed_tools or self.DEFAULT_ALLOWED_TOOLS
 
     def _build_args(self, prompt: str) -> list[str]:
         """build claude CLI arguments"""
@@ -38,6 +77,8 @@ class ClaudeCodeClient:
         ]
         if self.max_turns is not None:
             args.extend(["--max-turns", str(self.max_turns)])
+        if self.allowed_tools:
+            args.extend(["--allowedTools", " ".join(self.allowed_tools)])
         return args
 
     async def execute(
