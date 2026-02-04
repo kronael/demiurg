@@ -26,6 +26,7 @@ DEFAULT_SPEC = "DESIGN.md"
 @click.option("-w", "--workers", type=int, help="number of parallel workers")
 @click.option("-t", "--timeout", type=int, help="task timeout in seconds")
 @click.option("-m", "--max-turns", type=int, help="max agentic turns per task")
+@click.option("-v", "--verbose", is_flag=True, help="show prompts and raw responses")
 def run(
     design: str | None,
     file_: str | None,
@@ -33,6 +34,7 @@ def run(
     workers: int | None,
     timeout: int | None,
     max_turns: int | None,
+    verbose: bool,
 ) -> None:
     """autonomous coding agent
 
@@ -41,7 +43,7 @@ def run(
     signal.signal(signal.SIGTERM, lambda s, f: (_ for _ in ()).throw(KeyboardInterrupt()))
 
     try:
-        asyncio.run(_main(design, file_, cont, workers, timeout, max_turns))
+        asyncio.run(_main(design, file_, cont, workers, timeout, max_turns, verbose))
     except KeyboardInterrupt:
         click.echo("\ninterrupted")
         sys.exit(130)
@@ -54,6 +56,7 @@ async def _main(
     workers: int | None,
     timeout: int | None,
     max_turns: int | None,
+    verbose: bool,
 ) -> None:
     # resolve design file: -f flag > positional arg > default DESIGN.md
     design_file = file_ or design or DEFAULT_SPEC
@@ -70,6 +73,7 @@ async def _main(
             workers=workers,
             timeout=timeout,
             max_turns=max_turns,
+            verbose=verbose,
         )
     except RuntimeError as e:
         click.echo(f"error: {e}", err=True)
@@ -123,7 +127,7 @@ async def _main(
             sys.exit(1)
 
         logging.info(f"generated {len(tasks)} tasks")
-        click.echo(f"generated {len(tasks)} tasks")
+        click.echo(f"\n📝 generated {len(tasks)} tasks")
 
     queue: asyncio.Queue[Task] = asyncio.Queue()
 
@@ -144,13 +148,16 @@ async def _main(
     work = state.get_work_state()
     project_context = work.project_context if work else ""
     if project_context:
-        click.echo(f"context: {project_context[:80]}...")
+        click.echo(f"\n🎯 project: {project_context[:80]}...")
 
-    click.echo(f"progress: {completed}/{total} tasks completed")
-    click.echo(f"workers: {num_workers}\n")
+    click.echo(f"\n📊 progress: {completed}/{total} tasks completed")
+    click.echo(f"👥 workers: {num_workers}")
+    click.echo(f"🔄 max turns per task: {cfg.max_turns}")
+    click.echo(f"⏱️  timeout: {cfg.task_timeout}s\n")
+    click.echo("─" * 60)
 
     worker_list = [Worker(f"worker-{i}", cfg, state, project_context=project_context) for i in range(num_workers)]
-    judge = Judge(state, queue, project_context=project_context)
+    judge = Judge(state, queue, project_context=project_context, verbose=cfg.verbose)
 
     worker_tasks = [asyncio.create_task(w.run(queue)) for w in worker_list]
     judge_task = asyncio.create_task(judge.run())
@@ -169,7 +176,12 @@ async def _main(
     failed = len([t for t in final_tasks if t.status is TaskStatus.FAILED])
 
     logging.info("goal satisfied")
-    click.echo(f"\ngoal satisfied: {completed}/{total} completed, {failed} failed")
+    click.echo("─" * 60)
+    click.echo(f"\n✨ goal satisfied!")
+    click.echo(f"   {completed}/{total} completed")
+    if failed > 0:
+        click.echo(f"   {failed} failed")
+    click.echo()
 
 
 if __name__ == "__main__":

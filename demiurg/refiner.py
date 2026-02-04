@@ -12,9 +12,10 @@ from demiurg.types_ import Task, TaskStatus
 class Refiner:
     """analyzes completed work and creates follow-up tasks"""
 
-    def __init__(self, state: StateManager, project_context: str = ""):
+    def __init__(self, state: StateManager, project_context: str = "", verbose: bool = False):
         self.state = state
         self.project_context = project_context
+        self.verbose = verbose
         self.claude = ClaudeCodeClient(model="sonnet")
 
     async def refine(self) -> list[Task]:
@@ -56,8 +57,23 @@ Or if complete:
 <tasks>
 </tasks>"""
 
+        if self.verbose:
+            print(f"\n{'='*60}")
+            print(f"📤 REFINER PROMPT:")
+            print(f"{'='*60}")
+            print(prompt)
+            print(f"{'='*60}\n")
+
         try:
             result = await self.claude.execute(prompt, timeout=60)
+
+            if self.verbose:
+                print(f"\n{'='*60}")
+                print(f"📥 REFINER RESPONSE:")
+                print(f"{'='*60}")
+                print(result)
+                print(f"{'='*60}\n")
+
             new_tasks = self._parse_tasks(result)
 
             for task in new_tasks:

@@ -20,12 +20,14 @@ class Config:
     data_dir: str
     max_turns: int
     task_timeout: int
+    verbose: bool
 
     @staticmethod
     def load(
         workers: int | None = None,
         timeout: int | None = None,
         max_turns: int | None = None,
+        verbose: bool = False,
     ) -> Config:
         """load config from .env file and environment variables
 
@@ -47,7 +49,7 @@ class Config:
                 else int(os.getenv("TASK_TIMEOUT", "1200"))
             )
             if max_turns is None:
-                max_turns = int(os.getenv("MAX_TURNS", "5"))
+                max_turns = int(os.getenv("MAX_TURNS", "25"))
         except ValueError as e:
             raise RuntimeError(f"invalid config value: {e}") from e
 
@@ -65,4 +67,5 @@ class Config:
             data_dir=os.getenv("DATA_DIR", ".demiurg"),
             max_turns=max_turns,
             task_timeout=task_timeout,
+            verbose=verbose,
         )

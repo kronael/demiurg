@@ -39,17 +39,26 @@ class Worker:
             raise
 
     async def _execute(self, task: Task) -> None:
-        print(f"\n[{self.worker_id}] {task.description}")
+        print(f"\n🤖 [{self.worker_id}] {task.description}")
 
         await self.state.update_task(task.id, TaskStatus.RUNNING)
 
         try:
             result = await self._do_work(task)
 
+            # check if max turns error appeared in output
+            if "reached max turns" in result.lower():
+                await self.state.update_task(
+                    task.id, TaskStatus.FAILED, error="reached max turns"
+                )
+                print(f"⚠️  [{self.worker_id}] max turns reached - task incomplete")
+                logging.warning(f"{self.worker_id} max turns: {task.description}")
+                return
+
             await self.state.update_task(
                 task.id, TaskStatus.COMPLETED, result=result
             )
-            print(f"[{self.worker_id}] ✓ completed")
+            print(f"✅ [{self.worker_id}] done!")
             logging.info(f"{self.worker_id} completed: {task.description}")
 
         except RuntimeError as e:
@@ -59,10 +68,10 @@ class Worker:
                 task.id, TaskStatus.FAILED, error=error_msg
             )
             if "timeout" in error_msg.lower():
-                print(f"[{self.worker_id}] ✗ timeout")
+                print(f"⏱️  [{self.worker_id}] timeout after {self.cfg.task_timeout}s")
                 logging.warning(f"{self.worker_id} {error_msg}: {task.description}")
             else:
-                print(f"[{self.worker_id}] ✗ {error_msg}")
+                print(f"❌ [{self.worker_id}] error: {error_msg}")
                 logging.error(f"{self.worker_id} failed: {task.description}: {error_msg}")
 
         except Exception as e:
@@ -70,7 +79,7 @@ class Worker:
             await self.state.update_task(
                 task.id, TaskStatus.FAILED, error=error_msg
             )
-            print(f"[{self.worker_id}] ✗ {error_msg}")
+            print(f"❌ [{self.worker_id}] error: {error_msg}")
             logging.error(
                 f"{self.worker_id} failed: {task.description}: {error_msg}"
             )
@@ -94,9 +103,38 @@ class Worker:
 
         prompt = "\n\n".join(parts)
 
+        if self.cfg.verbose:
+            print(f"\n{'='*60}")
+            print(f"📤 PROMPT TO CLAUDE:")
+            print(f"{'='*60}")
+            print(prompt)
+            print(f"{'='*60}\n")
+            print(f"📥 RESPONSE FROM CLAUDE:")
+            print(f"{'='*60}\n")
+
         output_lines = []
         async for line in self.claude.execute_stream(prompt, timeout=self.cfg.task_timeout):
             if line.strip():
-                print(f"  {line}")
+                if self.cfg.verbose:
+                    # in verbose mode, just print raw output
+                    print(f"   {line}")
+                else:
+                    # add visual indicators for different types of output
+                    if line.startswith("Error:"):
+                        print(f"   ⚠️  {line}")
+                    elif any(word in line.lower() for word in ["writing", "creating", "adding"]):
+                        print(f"   ✏️  {line}")
+                    elif any(word in line.lower() for word in ["reading", "analyzing", "checking"]):
+                        print(f"   👀 {line}")
+                    elif any(word in line.lower() for word in ["running", "executing", "testing"]):
+                        print(f"   ⚡ {line}")
+                    else:
+                        print(f"   💭 {line}")
             output_lines.append(line)
+
+        if self.cfg.verbose:
+            print(f"\n{'='*60}")
+            print(f"✅ END OF RESPONSE")
+            print(f"{'='*60}\n")
+
         return "\n".join(output_lines)

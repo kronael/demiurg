@@ -20,6 +20,7 @@ demiurg                 # reads SPEC.md by default
 demiurg -f spec.txt     # specify design file
 demiurg -c              # continue from last run
 demiurg -w 8 -t 1200    # 8 workers, 20min timeout
+demiurg -v              # verbose mode (show prompts and responses)
 ```
 
 ## CLI (click-based)
@@ -34,12 +35,13 @@ entry point: `demiurg.__main__:run` using click decorators.
 @click.option("-w", "--workers", type=int, ...)
 @click.option("-t", "--timeout", type=int, ...)
 @click.option("-m", "--max-turns", type=int, ...)
+@click.option("-v", "--verbose", is_flag=True, ...)
 def run(...):
 ```
 
 defaults:
 - design file: SPEC.md (no positional arg required)
-- max_turns: 5 (bounded agent loops)
+- max_turns: 25 (agentic turns per task)
 - task_timeout: 1200s (20 minutes, agent told 10 minutes)
 - workers: 4
 
@@ -139,7 +141,7 @@ loads from ./.env (project-local) + environment variables:
 
 - NUM_WORKERS=4
 - TASK_TIMEOUT=1200 (seconds, default 20min; agent told 10min)
-- MAX_TURNS=5 (agentic turns per task)
+- MAX_TURNS=25 (agentic turns per task)
 - LOG_DIR=.demiurg/log
 - DATA_DIR=.demiurg
 

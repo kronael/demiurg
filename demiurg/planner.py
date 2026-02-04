@@ -17,6 +17,7 @@ class Planner:
         self.cfg = cfg
         self.state = state
         self.claude = ClaudeCodeClient(model="sonnet")
+        self.verbose = cfg.verbose
 
     async def plan_once(self) -> list[Task]:
         """break down goal into tasks (runs once)"""
@@ -68,8 +69,23 @@ Rules for tasks:
 - Skip explanations, examples, documentation
 - Consolidate related items when sensible, but prefer smaller tasks over large ones"""
 
+        if self.verbose:
+            print(f"\n{'='*60}")
+            print(f"📤 PLANNER PROMPT:")
+            print(f"{'='*60}")
+            print(prompt)
+            print(f"{'='*60}\n")
+
         try:
             result = await self.claude.execute(prompt, timeout=60)
+
+            if self.verbose:
+                print(f"\n{'='*60}")
+                print(f"📥 PLANNER RESPONSE:")
+                print(f"{'='*60}")
+                print(result)
+                print(f"{'='*60}\n")
+
             return self._parse_xml(result)
         except RuntimeError as e:
             logging.warning(f"claude parsing failed: {e}")
