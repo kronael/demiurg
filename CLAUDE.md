@@ -19,7 +19,7 @@ run locally:
 demiurg                 # reads SPEC.md by default
 demiurg -f spec.txt     # specify design file
 demiurg -c              # continue from last run
-demiurg -w 8 -t 300     # 8 workers, 5min timeout
+demiurg -w 8 -t 1200    # 8 workers, 20min timeout
 ```
 
 ## CLI (click-based)
@@ -40,7 +40,7 @@ def run(...):
 defaults:
 - design file: SPEC.md (no positional arg required)
 - max_turns: 5 (bounded agent loops)
-- task_timeout: 120s
+- task_timeout: 1200s (20 minutes, agent told 10 minutes)
 - workers: 4
 
 ## critical patterns
@@ -89,6 +89,10 @@ execution. prints in real-time prefixed with worker ID.
 **permission mode hardcoded**: claude CLI always called with
 `--permission-mode acceptEdits` to auto-approve file edits.
 
+**task sizing guidance**: planner told tasks should be completable in 2 days
+(underestimates scope) to generate smaller, focused tasks. workers told 10min
+timeout (actual 20min) to work efficiently.
+
 **dynamic worker scaling**: adjusts worker count to task count at startup
 (min(cfg.num_workers, len(pending_tasks))). never spawns more than tasks.
 
@@ -134,7 +138,7 @@ all state at ./.demiurg/ (project-local):
 loads from ./.env (project-local) + environment variables:
 
 - NUM_WORKERS=4
-- TASK_TIMEOUT=120 (seconds)
+- TASK_TIMEOUT=1200 (seconds, default 20min; agent told 10min)
 - MAX_TURNS=5 (agentic turns per task)
 - LOG_DIR=.demiurg/log
 - DATA_DIR=.demiurg

@@ -89,6 +89,7 @@ class Worker:
                 parts.append(skills_text)
                 parts.append("Use the relevant skills above for this task.")
 
+        parts.append("IMPORTANT: You have a 10-minute timeout for this task. Work efficiently and focus on completing the task within this timeframe.")
         parts.append(f"Task: {task.description}")
 
         prompt = "\n\n".join(parts)

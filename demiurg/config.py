@@ -44,7 +44,7 @@ class Config:
             )
             task_timeout = (
                 timeout if timeout is not None
-                else int(os.getenv("TASK_TIMEOUT", "120"))
+                else int(os.getenv("TASK_TIMEOUT", "1200"))
             )
             if max_turns is None:
                 max_turns = int(os.getenv("MAX_TURNS", "5"))

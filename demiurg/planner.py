@@ -61,10 +61,12 @@ Output format - return ONLY this XML:
 </project>
 
 Rules for tasks:
+- CRITICAL: Each task must be completable in 2 days or less - break large features into smaller subtasks
+- Keep tasks small and focused on a single, concrete action
 - Each task is a concrete, completable coding action
 - Task description starts with a verb (Create, Add, Implement, Write)
 - Skip explanations, examples, documentation
-- Consolidate related items when sensible"""
+- Consolidate related items when sensible, but prefer smaller tasks over large ones"""
 
         try:
             result = await self.claude.execute(prompt, timeout=60)
