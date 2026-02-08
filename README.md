@@ -72,8 +72,9 @@ demiurg -m 10          # 10 max turns per task (default: 5)
 
 ## requirements
 
-- claude code CLI installed and authenticated
-- run `claude --version` to verify
+- claude code CLI installed and authenticated (planner + workers)
+- codex CLI installed and authenticated (refiner critique)
+- run `claude --version` and `codex -V` to verify
 
 ## configuration
 
@@ -90,16 +91,18 @@ CLI args override env vars. all settings optional with defaults.
 ## architecture
 
 ```
-DESIGN.md → Planner → Tasks → Workers → Refiner → More Tasks? → Done
+DESIGN.md → Validator → PROJECT.md → Planner → Tasks → Workers → Refiner → More Tasks? → Done
                 ↓         ↓         ↓           ↓
           (extracts   (parallel  (analyzes   (up to 3
            context)    Claude)    results)    rounds)
 ```
 
-1. **planner** - parses DESIGN.md, extracts project context and tasks
+1. **planner** - parses DESIGN.md + PROJECT.md, extracts project context and tasks
+1. **validator** - rejects underspecified designs and writes REJECTION.md; generates PROJECT.md on accept
 2. **workers** - execute tasks in parallel using Claude CLI
 3. **judge** - monitors completion, triggers refinement
-4. **refiner** - analyzes completed work, creates follow-up tasks
+4. **refiner** - analyzes completed work via Codex CLI, creates follow-up tasks
+5. **replanner** - if no follow-up tasks, re-evaluates plan via Claude and adds any missing work
 
 ### skills injection
 
@@ -127,6 +130,9 @@ after all tasks complete, the refiner analyzes results:
 - do failed tasks need alternative approaches?
 
 up to 3 refinement rounds run automatically. no manual intervention needed.
+
+if refinement finds nothing, a single replanning round runs to catch missing
+work or alternative approaches.
 
 ## state
 

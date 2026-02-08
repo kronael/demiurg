@@ -16,7 +16,7 @@ make clean              # remove cache and state
 
 run locally:
 ```bash
-demiurg                 # reads SPEC.md by default
+demiurg                 # reads DESIGN.md by default
 demiurg -f spec.txt     # specify design file
 demiurg -c              # continue from last run
 demiurg -w 8 -t 1200    # 8 workers, 20min timeout
@@ -40,7 +40,7 @@ def run(...):
 ```
 
 defaults:
-- design file: SPEC.md (no positional arg required)
+- design file: DESIGN.md (no positional arg required)
 - max_turns: 25 (agentic turns per task)
 - task_timeout: 1200s (20 minutes, agent told 10 minutes)
 - workers: 4
@@ -91,6 +91,13 @@ execution. prints in real-time prefixed with worker ID.
 **permission mode hardcoded**: claude CLI always called with
 `--permission-mode acceptEdits` to auto-approve file edits.
 
+**codex for critique**: refiner uses Codex CLI (non-streaming) to generate
+follow-up tasks after worker completion.
+
+**replanning phase**: if refinement yields no new work, judge triggers a
+single replanning round via Claude to catch missing tasks or alternative
+approaches.
+
 **task sizing guidance**: planner told tasks should be completable in 2 days
 (underestimates scope) to generate smaller, focused tasks. workers told 10min
 timeout (actual 20min) to work efficiently.
@@ -105,6 +112,8 @@ timeout (actual 20min) to work efficiently.
 2. load config from env/.env files
 3. init state manager (loads from ./.demiurg/)
 4. if new run:
+   - validator checks DESIGN.md quality (rejects to REJECTION.md if underspecified)
+   - validator writes PROJECT.md on accept
    - planner.plan_once() parses design file into tasks
    - state.init_work() creates work.json
 5. if continuation (-c):
@@ -131,9 +140,12 @@ all state at ./.demiurg/ (project-local):
 - `state.py`: StateManager with async locks
 - `types_.py`: Task, TaskStatus, WorkState dataclasses
 - `planner.py`: parse design file into tasks using Claude CLI
+- `validator.py`: reject underspecified designs to REJECTION.md; generate PROJECT.md
 - `worker.py`: execute tasks from queue using ClaudeCodeClient
 - `claude_code.py`: isolated client for calling claude code CLI
 - `judge.py`: poll for completion every 5s, exit when done
+- `refiner.py`: create follow-up tasks using Codex CLI
+- `replanner.py`: propose new tasks using Claude CLI if refinement is empty
 
 ## configuration
 

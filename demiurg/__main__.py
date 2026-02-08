@@ -14,6 +14,7 @@ from demiurg.planner import Planner
 from demiurg.refiner import Refiner
 from demiurg.state import StateManager
 from demiurg.types_ import Task, TaskStatus
+from demiurg.validator import Validator
 from demiurg.worker import Worker
 
 DEFAULT_SPEC = "DESIGN.md"
@@ -116,8 +117,39 @@ async def _main(
             click.echo(f"error: {design_file} is empty", err=True)
             sys.exit(1)
 
+        validator = Validator(verbose=verbose)
+        validation = await validator.validate(goal_text)
+        if not validation.accept:
+            rejection_path = Path("REJECTION.md")
+            gaps_text = "\n".join(f"- {g}" for g in validation.gaps) or "- (no details provided)"
+            rejection = (
+                "# REJECTION\n\n"
+                "The design is not specific enough to execute. Please address these gaps:\n\n"
+                f"{gaps_text}\n"
+            )
+            try:
+                rejection_path.write_text(rejection)
+            except OSError as e:
+                click.echo(f"error: cannot write {rejection_path}: {e}", err=True)
+                sys.exit(1)
+            click.echo("error: design rejected (see REJECTION.md)")
+            sys.exit(1)
+
+        project_text = validation.project_md.strip()
+        if project_text:
+            try:
+                Path("PROJECT.md").write_text(project_text + "\n")
+            except OSError as e:
+                click.echo(f"error: cannot write PROJECT.md: {e}", err=True)
+                sys.exit(1)
+
         logging.info(f"new run: {design_file}")
-        await state.init_work(design_file, goal_text)
+        combined_goal = goal_text
+        if project_text:
+            combined_goal = (
+                f"{goal_text}\n\n---\n\n# PROJECT\n\n{project_text}\n"
+            )
+        await state.init_work(design_file, combined_goal)
 
         planner = Planner(cfg, state)
         tasks = await planner.plan_once()

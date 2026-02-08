@@ -14,8 +14,10 @@ goal-oriented execution: runs until satisfied, then exits (not a daemon).
 - single planner at startup (generates all tasks upfront)
 - workers execute tasks until complete
 - judge polls for completion, exits when done
+- if refinement is empty, a replanning pass may add missing tasks
 - no http api (removed for simplicity)
 - no cycles (runs once until complete)
+  - replanning is a single pass after refinement
 
 ### agent coordination
 
@@ -30,6 +32,8 @@ goal-oriented execution: runs until satisfied, then exits (not a daemon).
 - tasks persist to disk (survive restart)
 - queue unbounded, regenerated from pending tasks on continuation
 - workers block on empty queue (no polling)
+- design is validated before planning; underspecified specs are rejected to REJECTION.md
+ - validator produces PROJECT.md to clarify the design when accepted
 
 ### state persistence
 
@@ -53,7 +57,8 @@ goal-oriented execution: runs until satisfied, then exits (not a daemon).
 - .env config files (not toml)
 - precedence: env vars > ./.demiurg > ~/.demiurg/config
 - all settings have defaults (no required API keys)
-- uses claude code CLI session for authentication
+- uses claude code CLI session for authentication (planner/workers)
+- uses codex CLI session for refinement critique
 
 ### logging
 
@@ -67,7 +72,8 @@ goal-oriented execution: runs until satisfied, then exits (not a daemon).
 - single node only (no distributed coordination)
 - in-memory queue (regenerated from state)
 - python with asyncio (not Go)
-- uses claude code CLI (not direct API calls)
+- uses claude code CLI for planning/worker execution (not direct API calls)
+- uses codex CLI for refinement critique (not direct API calls)
 - no git operations (workers use claude code CLI which has git access)
 - no sub-planner spawning
 - no conflict resolution
