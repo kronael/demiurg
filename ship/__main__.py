@@ -64,7 +64,7 @@ def plan_mode(context: tuple[str, ...]) -> None:
 @click.command()
 @click.argument("context", nargs=-1)
 @click.option("-p", "--plan", "plan_", is_flag=True,
-              help="plan mode: interactive claude session")
+              help="[experimental] plan mode (see kronael/rsx for example)")
 @click.option("-c", "--continue", "cont", is_flag=True,
               help="continue from last run")
 @click.option("-w", "--workers", type=int,

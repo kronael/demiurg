@@ -20,7 +20,12 @@ ship -w 8            # 8 workers (default: 4)
 ship -t 600          # 10min timeout per task (default: 1200s)
 ship -m 10           # 10 agentic turns (default: 25)
 ship -v              # verbose (show prompts/responses)
+ship -p              # [experimental] plan mode
 ```
+
+plan mode (`-p`) is experimental and not recommended for general use.
+create plans using a dedicated claude session instead.
+see [kronael/rsx](https://github.com/kronael/rsx) for example usage.
 
 ## how it works
 

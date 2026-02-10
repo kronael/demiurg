@@ -19,7 +19,7 @@ ship                    # auto-discover SPEC.md / spec.md / specs/*.md
 ship <file>             # ship from file
 ship <dir>              # ship from dir
 ship <arg> <arg> ...    # args as context
-ship -p [args...]       # plan mode: interactive claude session
+ship -p [args...]       # [experimental] plan mode (see kronael/rsx)
 ship -c                 # continue from last run
 ship -w 8 -t 600 -m 10 # override workers/timeout/turns
 ship -v                 # verbose
