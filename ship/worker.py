@@ -26,6 +26,7 @@ class Worker:
         state: StateManager,
         project_context: str = "",
         judge: Judge | None = None,
+        session_id: str | None = None,
     ):
         self.worker_id = worker_id
         self.cfg = cfg
@@ -36,6 +37,8 @@ class Worker:
         self.claude = ClaudeCodeClient(
             model="sonnet",
             max_turns=cfg.max_turns,
+            role=f"worker-{worker_id}",
+            session_id=session_id,
         )
 
     async def run(self, queue: asyncio.Queue[Task]) -> None:

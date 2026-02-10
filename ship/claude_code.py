@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import AsyncIterator
 
 
@@ -11,6 +15,9 @@ class ClaudeCodeClient:
 
     spawns claude CLI subprocess and handles communication
     supports both buffered (execute) and streaming (execute_stream) modes
+
+    session reuse: pass session_id to continue conversations.
+    first call creates the session, subsequent calls resume it.
     """
 
     # common dev tools to allow in sandbox
@@ -57,12 +64,17 @@ class ClaudeCodeClient:
         permission_mode: str = "bypassPermissions",
         max_turns: int | None = None,
         allowed_tools: list[str] | None = None,
+        role: str = "unknown",
+        session_id: str | None = None,
     ):
         self.model = model
         self.cwd = cwd
         self.permission_mode = permission_mode
         self.max_turns = max_turns
         self.allowed_tools = allowed_tools or self.DEFAULT_ALLOWED_TOOLS
+        self.role = role
+        self.session_id = session_id
+        self._session_started = False
 
     def _build_args(self, prompt: str) -> list[str]:
         """build claude CLI arguments"""
@@ -75,6 +87,11 @@ class ClaudeCodeClient:
             "--permission-mode",
             self.permission_mode,
         ]
+        if self.session_id:
+            if self._session_started:
+                args.extend(["--resume", self.session_id])
+            else:
+                args.extend(["--session-id", self.session_id])
         if self.max_turns is not None:
             args.extend(["--max-turns", str(self.max_turns)])
         if self.allowed_tools:
@@ -110,16 +127,21 @@ class ClaudeCodeClient:
                 await proc.wait()
             except Exception as e:
                 logging.warning(f"error cleaning up process after timeout: {e}")
+            self._trace(len(prompt), 0, timeout, False)
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
         if proc.returncode != 0:
             error = stderr.decode().strip() or stdout.decode().strip()
+            self._trace(len(prompt), 0, timeout, False)
             raise RuntimeError(f"claude CLI failed: {error}")
 
         output = stdout.decode().strip()
         if not output:
             raise RuntimeError("claude CLI returned empty output")
 
+        if self.session_id:
+            self._session_started = True
+        self._trace(len(prompt), len(output), timeout, True)
         return output
 
     async def execute_stream(
@@ -161,6 +183,7 @@ class ClaudeCodeClient:
                 await proc.wait()
             except Exception as e:
                 logging.warning(f"error cleaning up process after timeout: {e}")
+            self._trace(0, 0, timeout, False)
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
         if proc.returncode != 0:
@@ -168,4 +191,37 @@ class ClaudeCodeClient:
             if proc.stderr:
                 stderr_text = (await proc.stderr.read()).decode().strip()
             error = stderr_text or "\n".join(output_lines)
+            self._trace(0, 0, timeout, False)
             raise RuntimeError(f"claude CLI failed: {error}")
+
+        if self.session_id:
+            self._session_started = True
+        self._trace(
+            0, sum(len(l) for l in output_lines), timeout, True
+        )
+
+    def _trace(
+        self,
+        prompt_len: int,
+        response_len: int,
+        duration_ms: int,
+        ok: bool,
+    ) -> None:
+        """append trace entry to .ship/log/trace.jl"""
+        trace_path = Path(".ship/log/trace.jl")
+        try:
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            entry = {
+                "ts": datetime.now(timezone.utc)
+                .strftime("%Y-%m-%dT%H:%M:%S"),
+                "role": self.role,
+                "model": self.model,
+                "prompt_len": prompt_len,
+                "response_len": response_len,
+                "duration_ms": duration_ms,
+                "ok": ok,
+            }
+            with open(trace_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except OSError:
+            pass

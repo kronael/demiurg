@@ -14,10 +14,18 @@ from ship.types_ import Task, TaskStatus
 class Planner:
     """breaks down design files into executable tasks"""
 
-    def __init__(self, cfg: Config, state: StateManager):
+    def __init__(
+        self,
+        cfg: Config,
+        state: StateManager,
+        session_id: str | None = None,
+    ):
         self.cfg = cfg
         self.state = state
-        self.claude = ClaudeCodeClient(model="sonnet")
+        self.claude = ClaudeCodeClient(
+            model="sonnet", role="planner",
+            session_id=session_id,
+        )
         self.verbose = cfg.verbose
 
     async def plan_once(self) -> list[Task]:

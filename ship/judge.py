@@ -31,6 +31,7 @@ class Judge:
         max_refine_rounds: int = 10,
         max_replan_rounds: int = 1,
         verbose: bool = False,
+        session_id: str | None = None,
     ):
         self.state = state
         self.queue = queue
@@ -41,10 +42,16 @@ class Judge:
         self.refine_count = 0
         self.replan_count = 0
         self.worker_tasks: dict[str, str] = {}
-        self.claude = ClaudeCodeClient(model="sonnet")
-        self.refiner = Refiner(state, project_context, verbose=verbose)
+        self.claude = ClaudeCodeClient(
+            model="sonnet", role="judge",
+            session_id=session_id,
+        )
+        self.refiner = Refiner(
+            state, project_context, verbose=verbose,
+        )
         self.replanner = Replanner(
-            state, project_context, verbose=verbose
+            state, project_context, verbose=verbose,
+            session_id=session_id,
         )
         self._completed_queue: list[Task] = []
 

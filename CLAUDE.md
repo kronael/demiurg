@@ -15,11 +15,14 @@ make clean              # rm cache + state
 ```
 
 ```bash
-ship                 # reads DESIGN.md
-ship -f spec.txt     # specify design file
-ship -c              # continue from last run
-ship -w 8 -t 600     # 8 workers, 10min timeout
-ship -v              # verbose mode
+ship                    # auto-discover SPEC.md / spec.md / specs/*.md
+ship <file>             # ship from file
+ship <dir>              # ship from dir
+ship <arg> <arg> ...    # args as context
+ship -p [args...]       # plan mode: interactive claude session
+ship -c                 # continue from last run
+ship -w 8 -t 600 -m 10 # override workers/timeout/turns
+ship -v                 # verbose
 ```
 
 ## defaults
@@ -27,7 +30,7 @@ ship -v              # verbose mode
 - workers: 4
 - max_turns: 25
 - task_timeout: 1200s (20min, agents told the real value)
-- design file: DESIGN.md
+- spec discovery: SPEC.md > spec.md > specs/*.md
 
 ## how it runs
 
@@ -61,7 +64,8 @@ config precedence: CLI args > env vars > .env file > defaults.
 
 ## state
 
-all in `.ship/`: tasks.json, work.json, log/
+`.ship/` (internal, gitignored): tasks.json, work.json, log/ship.log, log/trace.jl
+project root (LLM-visible): SPEC.md, PLAN.md, PROGRESS.md, LOG.md, PROJECT.md
 
 ## key files
 

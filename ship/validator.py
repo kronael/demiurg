@@ -17,12 +17,32 @@ class ValidationResult:
 class Validator:
     """validate design/spec quality before planning"""
 
-    def __init__(self, verbose: bool = False):
+    def __init__(
+        self,
+        verbose: bool = False,
+        session_id: str | None = None,
+    ):
         self.verbose = verbose
-        self.claude = ClaudeCodeClient(model="sonnet")
+        self.claude = ClaudeCodeClient(
+            model="sonnet", role="validator",
+            session_id=session_id,
+        )
 
-    async def validate(self, design_text: str) -> ValidationResult:
-        prompt = VALIDATOR.format(design_text=design_text)
+    async def validate(
+        self,
+        design_text: str,
+        context: list[str] | None = None,
+    ) -> ValidationResult:
+        context_section = ""
+        if context:
+            joined = "\n".join(f"- {c}" for c in context)
+            context_section = (
+                f"\nAdditional context:\n{joined}\n"
+            )
+        prompt = VALIDATOR.format(
+            design_text=design_text,
+            context_section=context_section,
+        )
 
         if self.verbose:
             print(f"\n{'='*60}")
