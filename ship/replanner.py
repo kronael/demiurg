@@ -19,14 +19,15 @@ class Replanner:
         self,
         state: StateManager,
         project_context: str = "",
-        verbose: bool = False,
+        verbosity: int = 1,
         session_id: str | None = None,
     ):
         self.state = state
         self.project_context = project_context
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.claude = ClaudeCodeClient(
-            model="sonnet", role="replanner",
+            model="sonnet",
+            role="replanner",
             session_id=session_id,
         )
 
@@ -36,21 +37,15 @@ class Replanner:
             return []
 
         all_tasks = await self.state.get_all_tasks()
-        completed = [
-            t for t in all_tasks
-            if t.status is TaskStatus.COMPLETED
-        ]
-        failed = [
-            t for t in all_tasks
-            if t.status is TaskStatus.FAILED
-        ]
+        completed = [t for t in all_tasks if t.status is TaskStatus.COMPLETED]
+        failed = [t for t in all_tasks if t.status is TaskStatus.FAILED]
 
-        completed_summary = "\n".join(
-            f"- {t.description}" for t in completed[-15:]
-        ) or "None"
-        failed_summary = "\n".join(
-            f"- {t.description}: {t.error}" for t in failed[-5:]
-        ) or "None"
+        completed_summary = (
+            "\n".join(f"- {t.description}" for t in completed[-15:]) or "None"
+        )
+        failed_summary = (
+            "\n".join(f"- {t.description}: {t.error}" for t in failed[-5:]) or "None"
+        )
 
         progress = ""
         try:
@@ -65,13 +60,11 @@ class Replanner:
             pass
 
         progress_section = (
-            f"PROGRESS.md (includes per-task judgments):\n"
-            f"{progress[:1500]}"
-            if progress else ""
+            f"PROGRESS.md (includes per-task judgments):\n{progress[:1500]}"
+            if progress
+            else ""
         )
-        plan_section = (
-            f"PLAN.md:\n{plan[:1000]}" if plan else ""
-        )
+        plan_section = f"PLAN.md:\n{plan[:1000]}" if plan else ""
 
         prompt = REPLANNER.format(
             project_context=self.project_context,
@@ -82,27 +75,21 @@ class Replanner:
             failed_summary=failed_summary,
         )
 
-        if self.verbose:
-            display.event(
-                f"  replanner prompt: {len(prompt)} chars"
-            )
+        if self.verbosity >= 3:
+            display.event(f"  replanner prompt: {len(prompt)} chars", min_level=3)
         else:
-            display.event("  replanner: full assessment...")
+            display.event("  replanner: full assessment...", min_level=2)
 
         try:
             result = await self.claude.execute(prompt, timeout=90)
 
-            if self.verbose:
-                display.event(
-                    f"  replanner response: {len(result)} chars"
-                )
+            if self.verbosity >= 3:
+                display.event(f"  replanner response: {len(result)} chars", min_level=3)
 
             new_tasks = self._parse_tasks(result)
             for task in new_tasks:
                 await self.state.add_task(task)
-                logging.info(
-                    f"replanner created task: {task.description}"
-                )
+                logging.info(f"replanner created task: {task.description}")
 
             if not new_tasks:
                 display.event("  replanner: goal met")
@@ -115,9 +102,7 @@ class Replanner:
 
     def _parse_tasks(self, text: str) -> list[Task]:
         tasks = []
-        for desc in re.findall(
-            r"<task>(.*?)</task>", text, re.DOTALL
-        ):
+        for desc in re.findall(r"<task>(.*?)</task>", text, re.DOTALL):
             desc = desc.strip()
             if desc and len(desc) > 5:
                 tasks.append(

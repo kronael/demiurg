@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
-import sys
-import time
+import os
+import signal
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator
@@ -98,9 +97,7 @@ class ClaudeCodeClient:
             args.extend(["--allowedTools", " ".join(self.allowed_tools)])
         return args
 
-    async def execute(
-        self, prompt: str, timeout: int = 120
-    ) -> str:
+    async def execute(self, prompt: str, timeout: int = 120) -> str:
         """execute prompt via claude code CLI
 
         spawns: claude -p <prompt> --model <model> [--max-turns N]
@@ -116,17 +113,17 @@ class ClaudeCodeClient:
             cwd=self.cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
 
         try:
             async with asyncio.timeout(timeout):
                 stdout, stderr = await proc.communicate()
+        except asyncio.CancelledError:
+            await self._kill_proc(proc)
+            raise
         except TimeoutError:
-            try:
-                proc.kill()
-                await proc.wait()
-            except Exception as e:
-                logging.warning(f"error cleaning up process after timeout: {e}")
+            await self._kill_proc(proc)
             self._trace(len(prompt), 0, timeout, False)
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
@@ -158,6 +155,7 @@ class ClaudeCodeClient:
             cwd=self.cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
 
         output_lines = []
@@ -177,12 +175,11 @@ class ClaudeCodeClient:
                     yield decoded
 
                 await proc.wait()
+        except asyncio.CancelledError:
+            await self._kill_proc(proc)
+            raise
         except TimeoutError:
-            try:
-                proc.kill()
-                await proc.wait()
-            except Exception as e:
-                logging.warning(f"error cleaning up process after timeout: {e}")
+            await self._kill_proc(proc)
             self._trace(0, 0, timeout, False)
             raise RuntimeError(f"claude CLI timeout after {timeout}s")
 
@@ -196,9 +193,35 @@ class ClaudeCodeClient:
 
         if self.session_id:
             self._session_started = True
-        self._trace(
-            0, sum(len(l) for l in output_lines), timeout, True
-        )
+        self._trace(0, sum(len(line) for line in output_lines), timeout, True)
+
+    @staticmethod
+    async def _kill_proc(proc: asyncio.subprocess.Process) -> None:
+        """kill subprocess and its process group
+
+        try SIGTERM, wait 10s, then SIGKILL if still alive
+        """
+        if proc.returncode is not None:
+            return
+
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            try:
+                proc.terminate()
+            except (OSError, ProcessLookupError):
+                return
+
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                try:
+                    proc.kill()
+                except (OSError, ProcessLookupError):
+                    pass
 
     def _trace(
         self,
@@ -212,8 +235,7 @@ class ClaudeCodeClient:
         try:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             entry = {
-                "ts": datetime.now(timezone.utc)
-                .strftime("%Y-%m-%dT%H:%M:%S"),
+                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
                 "role": self.role,
                 "model": self.model,
                 "prompt_len": prompt_len,

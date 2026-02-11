@@ -20,14 +20,14 @@ class Config:
     data_dir: str
     max_turns: int
     task_timeout: int
-    verbose: bool
+    verbosity: int
 
     @staticmethod
     def load(
         workers: int | None = None,
         timeout: int | None = None,
         max_turns: int | None = None,
-        verbose: bool = False,
+        verbosity: int = 1,
     ) -> Config:
         """load config from .env file and environment variables
 
@@ -41,11 +41,11 @@ class Config:
         try:
             # CLI args override env vars
             num_workers = (
-                workers if workers is not None
-                else int(os.getenv("NUM_WORKERS", "4"))
+                workers if workers is not None else int(os.getenv("NUM_WORKERS", "4"))
             )
             task_timeout = (
-                timeout if timeout is not None
+                timeout
+                if timeout is not None
                 else int(os.getenv("TASK_TIMEOUT", "1200"))
             )
             if max_turns is None:
@@ -67,5 +67,5 @@ class Config:
             data_dir=os.getenv("DATA_DIR", ".ship"),
             max_turns=max_turns,
             task_timeout=task_timeout,
-            verbose=verbose,
+            verbosity=verbosity,
         )

@@ -19,24 +19,18 @@ class Refiner:
         self,
         state: StateManager,
         project_context: str = "",
-        verbose: bool = False,
+        verbosity: int = 1,
     ):
         self.state = state
         self.project_context = project_context
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.codex = CodexClient()
 
     async def refine(self) -> list[Task]:
         all_tasks = await self.state.get_all_tasks()
 
-        completed = [
-            t for t in all_tasks
-            if t.status is TaskStatus.COMPLETED
-        ]
-        failed = [
-            t for t in all_tasks
-            if t.status is TaskStatus.FAILED
-        ]
+        completed = [t for t in all_tasks if t.status is TaskStatus.COMPLETED]
+        failed = [t for t in all_tasks if t.status is TaskStatus.FAILED]
 
         if not completed and not failed:
             return []
@@ -47,17 +41,16 @@ class Refiner:
         except OSError:
             pass
 
-        completed_summary = "\n".join(
-            f"- [DONE] {t.description}" for t in completed[-10:]
-        ) or "None"
-        failed_summary = "\n".join(
-            f"- [FAIL] {t.description}: {t.error}"
-            for t in failed[-5:]
-        ) or "None"
+        completed_summary = (
+            "\n".join(f"- [DONE] {t.description}" for t in completed[-10:]) or "None"
+        )
+        failed_summary = (
+            "\n".join(f"- [FAIL] {t.description}: {t.error}" for t in failed[-5:])
+            or "None"
+        )
 
         progress_section = (
-            f"PROGRESS.md (includes judge verdicts):\n{progress}"
-            if progress else ""
+            f"PROGRESS.md (includes judge verdicts):\n{progress}" if progress else ""
         )
 
         prompt = REFINER.format(
@@ -67,25 +60,21 @@ class Refiner:
             failed_summary=failed_summary,
         )
 
-        if self.verbose:
-            display.event(f"  refiner prompt: {len(prompt)} chars")
+        if self.verbosity >= 3:
+            display.event(f"  refiner prompt: {len(prompt)} chars", min_level=3)
         else:
-            display.event("  refiner: codex critiquing...")
+            display.event("  refiner: codex critiquing...", min_level=2)
 
         try:
             result = await self.codex.execute(prompt, timeout=60)
 
-            if self.verbose:
-                display.event(
-                    f"  refiner response: {len(result)} chars"
-                )
+            if self.verbosity >= 3:
+                display.event(f"  refiner response: {len(result)} chars", min_level=3)
 
             new_tasks = self._parse_tasks(result)
             for task in new_tasks:
                 await self.state.add_task(task)
-                logging.info(
-                    f"refiner created task: {task.description}"
-                )
+                logging.info(f"refiner created task: {task.description}")
 
             if not new_tasks:
                 display.event("  refiner: no follow-up tasks")
@@ -98,9 +87,7 @@ class Refiner:
 
     def _parse_tasks(self, text: str) -> list[Task]:
         tasks = []
-        for desc in re.findall(
-            r"<task>(.*?)</task>", text, re.DOTALL
-        ):
+        for desc in re.findall(r"<task>(.*?)</task>", text, re.DOTALL):
             desc = desc.strip()
             if desc and len(desc) > 5:
                 tasks.append(

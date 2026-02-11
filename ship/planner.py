@@ -23,10 +23,11 @@ class Planner:
         self.cfg = cfg
         self.state = state
         self.claude = ClaudeCodeClient(
-            model="sonnet", role="planner",
+            model="sonnet",
+            role="planner",
             session_id=session_id,
         )
-        self.verbose = cfg.verbose
+        self.verbosity = cfg.verbosity
 
     async def plan_once(self) -> list[Task]:
         """break down goal into tasks (runs once)"""
@@ -36,11 +37,14 @@ class Planner:
 
         logging.info("breaking down goal into tasks")
 
-        context, tasks = await self._parse_design(work.goal_text)
+        context, tasks, mode = await self._parse_design(work.goal_text)
 
         if context:
             await self.state.set_project_context(context)
             logging.info(f"project context: {context[:100]}...")
+
+        await self.state.set_execution_mode(mode)
+        logging.info(f"execution mode: {mode}")
 
         for task in tasks:
             await self.state.add_task(task)
@@ -48,47 +52,46 @@ class Planner:
 
         return tasks
 
-    async def _parse_design(
-        self, goal: str
-    ) -> tuple[str, list[Task]]:
+    async def _parse_design(self, goal: str) -> tuple[str, list[Task], str]:
         prompt = PLANNER.format(goal=goal)
 
-        if self.verbose:
-            print(f"\n{'='*60}")
+        if self.verbosity >= 3:
+            print(f"\n{'=' * 60}")
             print("PLANNER PROMPT:")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             print(prompt)
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
 
         try:
             result = await self.claude.execute(prompt, timeout=60)
 
-            if self.verbose:
-                print(f"\n{'='*60}")
+            if self.verbosity >= 3:
+                print(f"\n{'=' * 60}")
                 print("PLANNER RESPONSE:")
-                print(f"{'='*60}")
+                print(f"{'=' * 60}")
                 print(result)
-                print(f"{'='*60}\n")
+                print(f"{'=' * 60}\n")
 
             return self._parse_xml(result)
         except RuntimeError as e:
             logging.warning(f"claude parsing failed: {e}")
-            return "", []
+            return "", [], "parallel"
 
-    def _parse_xml(self, text: str) -> tuple[str, list[Task]]:
-        context_match = re.search(
-            r"<context>(.*?)</context>", text, re.DOTALL
-        )
-        context = (
-            context_match.group(1).strip()
-            if context_match else ""
-        )
+    def _parse_xml(self, text: str) -> tuple[str, list[Task], str]:
+        context_match = re.search(r"<context>(.*?)</context>", text, re.DOTALL)
+        context = context_match.group(1).strip() if context_match else ""
+
+        mode_match = re.search(r"<mode>(.*?)</mode>", text, re.DOTALL)
+        mode = mode_match.group(1).strip().lower() if mode_match else "parallel"
+        if mode not in ("parallel", "sequential"):
+            mode = "parallel"
 
         tasks = []
-        for desc in re.findall(
-            r"<task>(.*?)</task>", text, re.DOTALL
+        for match in re.finditer(
+            r'<task(?:\s+worker="([^"]+)")?\s*>(.*?)</task>', text, re.DOTALL
         ):
-            desc = desc.strip()
+            worker = match.group(1) or "auto"
+            desc = match.group(2).strip()
             if desc and len(desc) > 5:
                 tasks.append(
                     Task(
@@ -96,7 +99,8 @@ class Planner:
                         description=desc,
                         files=[],
                         status=TaskStatus.PENDING,
+                        worker=worker,
                     )
                 )
 
-        return context, tasks
+        return context, tasks, mode

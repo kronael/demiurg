@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 class Worker:
     """executes tasks from queue using claude code CLI"""
+
     def __init__(
         self,
         worker_id: str,
@@ -57,12 +58,10 @@ class Worker:
 
     async def _execute(self, task: Task) -> None:
         short_desc = task.description[:60]
-        display.event(f"  [{self.worker_id}] {short_desc}")
+        display.event(f"  [{self.worker_id}] {short_desc}", min_level=2)
 
         if self.judge:
-            self.judge.set_worker_task(
-                self.worker_id, task.description
-            )
+            self.judge.set_worker_task(self.worker_id, task.description)
 
         await self.state.update_task(task.id, TaskStatus.RUNNING)
 
@@ -71,24 +70,18 @@ class Worker:
 
             if "reached max turns" in result.lower():
                 await self.state.update_task(
-                    task.id, TaskStatus.FAILED,
+                    task.id,
+                    TaskStatus.FAILED,
                     error="reached max turns",
                 )
-                log_entry(
-                    f"fail (max turns): {task.description[:60]}"
-                )
+                log_entry(f"fail (max turns): {task.description[:60]}")
                 display.event(
-                    f"  [{self.worker_id}] max turns - incomplete"
+                    f"  [{self.worker_id}] max turns - incomplete", min_level=2
                 )
-                logging.warning(
-                    f"{self.worker_id} max turns: "
-                    f"{task.description}"
-                )
+                logging.warning(f"{self.worker_id} max turns: {task.description}")
                 return
 
-            await self.state.update_task(
-                task.id, TaskStatus.COMPLETED, result=result
-            )
+            await self.state.update_task(task.id, TaskStatus.COMPLETED, result=result)
             if self.judge:
                 updated = Task(
                     id=task.id,
@@ -99,46 +92,28 @@ class Worker:
                 )
                 self.judge.notify_completed(updated)
             log_entry(f"done: {task.description[:60]}")
-            display.event(f"  [{self.worker_id}] done")
-            logging.info(
-                f"{self.worker_id} completed: {task.description}"
-            )
+            display.event(f"  [{self.worker_id}] done", min_level=2)
+            logging.info(f"{self.worker_id} completed: {task.description}")
 
         except RuntimeError as e:
             error_msg = str(e) if str(e) else type(e).__name__
-            await self.state.update_task(
-                task.id, TaskStatus.FAILED, error=error_msg
-            )
+            await self.state.update_task(task.id, TaskStatus.FAILED, error=error_msg)
             if "timeout" in error_msg.lower():
                 display.event(
-                    f"  [{self.worker_id}] timeout "
-                    f"after {self.cfg.task_timeout}s"
+                    f"  [{self.worker_id}] timeout after {self.cfg.task_timeout}s"
                 )
-                logging.warning(
-                    f"{self.worker_id} {error_msg}: "
-                    f"{task.description}"
-                )
+                logging.warning(f"{self.worker_id} {error_msg}: {task.description}")
             else:
-                display.event(
-                    f"  [{self.worker_id}] error: {error_msg}"
-                )
+                display.event(f"  [{self.worker_id}] error: {error_msg}")
                 logging.error(
-                    f"{self.worker_id} failed: "
-                    f"{task.description}: {error_msg}"
+                    f"{self.worker_id} failed: {task.description}: {error_msg}"
                 )
 
         except Exception as e:
             error_msg = str(e) if str(e) else type(e).__name__
-            await self.state.update_task(
-                task.id, TaskStatus.FAILED, error=error_msg
-            )
-            display.event(
-                f"  [{self.worker_id}] error: {error_msg}"
-            )
-            logging.error(
-                f"{self.worker_id} failed: "
-                f"{task.description}: {error_msg}"
-            )
+            await self.state.update_task(task.id, TaskStatus.FAILED, error=error_msg)
+            display.event(f"  [{self.worker_id}] error: {error_msg}")
+            logging.error(f"{self.worker_id} failed: {task.description}: {error_msg}")
 
         finally:
             if self.judge:
@@ -154,7 +129,9 @@ class Worker:
         if self.skills:
             skills_text = format_skills_for_prompt(self.skills)
             if skills_text:
-                skills = f"{skills_text}\n\nUse the relevant skills above for this task.\n\n"
+                skills = (
+                    f"{skills_text}\n\nUse the relevant skills above for this task.\n\n"
+                )
 
         prompt = WORKER.format(
             context=context,
@@ -163,23 +140,23 @@ class Worker:
             description=task.description,
         )
 
-        if self.cfg.verbose:
-            display.event(f"\n{'='*60}")
-            display.event("PROMPT TO CLAUDE:")
-            display.event(f"{'='*60}")
-            display.event(prompt)
-            display.event(f"{'='*60}\n")
+        if self.cfg.verbosity >= 3:
+            display.event(f"\n{'=' * 60}", min_level=3)
+            display.event("PROMPT TO CLAUDE:", min_level=3)
+            display.event(f"{'=' * 60}", min_level=3)
+            display.event(prompt, min_level=3)
+            display.event(f"{'=' * 60}\n", min_level=3)
 
         output_lines = []
         async for line in self.claude.execute_stream(
             prompt, timeout=self.cfg.task_timeout
         ):
             if line.strip():
-                if self.cfg.verbose:
-                    display.event(f"   {line}")
+                if self.cfg.verbosity >= 3:
+                    display.event(f"   {line}", min_level=3)
             output_lines.append(line)
 
-        if self.cfg.verbose:
-            display.event(f"\n{'='*60}")
+        if self.cfg.verbosity >= 3:
+            display.event(f"\n{'=' * 60}", min_level=3)
 
         return "\n".join(output_lines)

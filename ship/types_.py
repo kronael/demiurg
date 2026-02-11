@@ -8,6 +8,7 @@ from typing import Any
 
 class TaskStatus(str, Enum):
     """task execution states"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -17,6 +18,7 @@ class TaskStatus(str, Enum):
 @dataclass(slots=True)
 class Task:
     """represents a single executable task"""
+
     id: str
     description: str
     files: list[str]
@@ -27,6 +29,7 @@ class Task:
     retries: int = 0
     error: str = ""
     result: str = ""
+    worker: str = "auto"  # "auto" or specific worker id like "w0"
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -38,6 +41,7 @@ class Task:
             "retries": self.retries,
             "error": self.error,
             "result": self.result,
+            "worker": self.worker,
         }
         if self.started_at:
             d["started_at"] = self.started_at.isoformat()
@@ -49,10 +53,12 @@ class Task:
 @dataclass(slots=True)
 class WorkState:
     """tracks overall work progress and goal state"""
+
     design_file: str
     goal_text: str
     is_complete: bool = False
     project_context: str = ""  # brief description for workers
+    execution_mode: str = "parallel"  # "parallel" or "sequential"
     started_at: datetime = field(default_factory=datetime.now)
     last_updated_at: datetime = field(default_factory=datetime.now)
 
@@ -62,6 +68,7 @@ class WorkState:
             "goal_text": self.goal_text,
             "is_complete": self.is_complete,
             "project_context": self.project_context,
+            "execution_mode": self.execution_mode,
             "started_at": self.started_at.isoformat(),
             "last_updated_at": self.last_updated_at.isoformat(),
         }

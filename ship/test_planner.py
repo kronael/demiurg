@@ -1,4 +1,5 @@
 """Unit tests for planner module"""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -19,7 +20,7 @@ def config(tmp_path):
         data_dir=str(tmp_path / ".ship"),
         max_turns=5,
         task_timeout=120,
-        verbose=False,
+        verbosity=1,
     )
 
 
@@ -39,7 +40,7 @@ def test_parse_xml_basic(planner):
 <task>Add HTTP server</task>
 </tasks>"""
 
-    context, tasks = planner._parse_xml(xml)
+    context, tasks, mode = planner._parse_xml(xml)
 
     assert len(tasks) == 2
     assert tasks[0].description == "Create main.go"
@@ -57,7 +58,7 @@ def test_parse_xml_with_whitespace(planner):
     </tasks>
     """
 
-    context, tasks = planner._parse_xml(xml)
+    context, tasks, mode = planner._parse_xml(xml)
 
     assert len(tasks) == 2
     assert tasks[0].description == "Create main.go"
@@ -65,8 +66,9 @@ def test_parse_xml_with_whitespace(planner):
 
 
 def test_parse_xml_empty(planner):
-    context, tasks = planner._parse_xml("<tasks></tasks>")
+    context, tasks, mode = planner._parse_xml("<tasks></tasks>")
     assert len(tasks) == 0
+    assert mode == "parallel"
 
 
 def test_parse_xml_ignores_short(planner):
@@ -75,7 +77,7 @@ def test_parse_xml_ignores_short(planner):
 <task>Create a valid task</task>
 </tasks>"""
 
-    context, tasks = planner._parse_xml(xml)
+    context, tasks, mode = planner._parse_xml(xml)
 
     assert len(tasks) == 1
     assert tasks[0].description == "Create a valid task"
@@ -90,7 +92,7 @@ def test_parse_xml_with_noise(planner):
 
 Let me know if you need more."""
 
-    context, tasks = planner._parse_xml(xml)
+    context, tasks, mode = planner._parse_xml(xml)
 
     assert len(tasks) == 1
     assert tasks[0].description == "Create main.go"
@@ -104,7 +106,7 @@ def test_parse_xml_with_context(planner):
 </tasks>
 </project>"""
 
-    context, tasks = planner._parse_xml(xml)
+    context, tasks, mode = planner._parse_xml(xml)
 
     assert context == "Go web server with REST API"
     assert len(tasks) == 1
@@ -124,7 +126,7 @@ async def test_parse_design_success(planner):
 
     planner.claude.execute = AsyncMock(return_value=xml_response)
 
-    context, tasks = await planner._parse_design(goal)
+    context, tasks, mode = await planner._parse_design(goal)
 
     assert context == "Go web server"
     assert len(tasks) == 2
@@ -136,7 +138,7 @@ async def test_parse_design_claude_failure(planner):
     goal = "Create a web server"
     planner.claude.execute = AsyncMock(side_effect=RuntimeError("timeout"))
 
-    context, tasks = await planner._parse_design(goal)
+    context, tasks, mode = await planner._parse_design(goal)
 
     assert context == ""
     assert len(tasks) == 0
