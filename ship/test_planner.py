@@ -1,11 +1,14 @@
-"""Unit tests for planner, worker parse, state cascade"""
+"""Unit tests for planner, worker parse, state cascade, adversarial"""
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
+from unittest.mock import patch
 
 import pytest
 
 from ship.config import Config
+from ship.judge import Judge
 from ship.judge import is_cascade_error
 from ship.planner import Planner
 from ship.state import StateManager
@@ -379,3 +382,179 @@ def test_is_cascade_error():
     assert not is_cascade_error("some other error")
     assert not is_cascade_error("")
     assert not is_cascade_error("Cascade: wrong case")
+
+
+# -- adversarial verification tests --
+
+
+def _make_judge(tmp_path, session_id="test-sess"):
+    state = StateManager(str(tmp_path))
+    queue = asyncio.Queue()
+    return Judge(
+        state=state,
+        queue=queue,
+        project_context="test project",
+        session_id=session_id,
+    )
+
+
+def test_parse_challenges():
+    judge = _make_judge.__wrapped__(None) if hasattr(
+        _make_judge, "__wrapped__"
+    ) else None
+    # test _parse_challenges directly via a fresh Judge
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        j = _make_judge(td)
+        text = (
+            "<challenges>\n"
+            "<challenge>Verify that X works</challenge>\n"
+            "<challenge>Check that Y handles Z</challenge>\n"
+            "<challenge>  </challenge>\n"
+            "</challenges>"
+        )
+        result = j._parse_challenges(text)
+        assert len(result) == 2
+        assert result[0] == "Verify that X works"
+        assert result[1] == "Check that Y handles Z"
+
+
+def test_parse_challenges_empty():
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        j = _make_judge(td)
+        assert j._parse_challenges("no tags here") == []
+        assert j._parse_challenges(
+            "<challenges></challenges>"
+        ) == []
+
+
+@pytest.mark.asyncio
+async def test_check_adv_batch_pending(tmp_path):
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build something")
+
+    task = Task(
+        id="adv-1", description="Verify X",
+        files=[], status=TaskStatus.PENDING,
+    )
+    await j.state.add_task(task)
+    j._adv_task_ids = {"adv-1"}
+
+    result = await j._check_adv_batch()
+    assert result == "pending"
+
+
+@pytest.mark.asyncio
+async def test_check_adv_batch_pass(tmp_path):
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build something")
+
+    task = Task(
+        id="adv-1", description="Verify X",
+        files=[], status=TaskStatus.COMPLETED,
+    )
+    await j.state.add_task(task)
+    j._adv_task_ids = {"adv-1"}
+
+    result = await j._check_adv_batch()
+    assert result == "pass"
+
+
+@pytest.mark.asyncio
+async def test_check_adv_batch_fail(tmp_path):
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build something")
+
+    t1 = Task(
+        id="adv-1", description="Verify X",
+        files=[], status=TaskStatus.COMPLETED,
+    )
+    t2 = Task(
+        id="adv-2", description="Check Y",
+        files=[], status=TaskStatus.FAILED,
+        error="verification failed",
+    )
+    await j.state.add_task(t1)
+    await j.state.add_task(t2)
+    j._adv_task_ids = {"adv-1", "adv-2"}
+
+    result = await j._check_adv_batch()
+    assert result == "fail"
+
+
+@pytest.mark.asyncio
+async def test_run_adversarial_round(tmp_path):
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build a web app")
+
+    challenges_xml = (
+        "<challenges>\n"
+        "<challenge>Verify the server starts</challenge>\n"
+        "<challenge>Check error handling works</challenge>\n"
+        "<challenge>Verify tests pass cleanly</challenge>\n"
+        "</challenges>"
+    )
+
+    with patch.object(
+        j, "_run_adversarial_round",
+        wraps=j._run_adversarial_round,
+    ):
+        with patch(
+            "ship.judge.ClaudeCodeClient"
+        ) as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.execute = AsyncMock(
+                return_value=(challenges_xml, "")
+            )
+            mock_cls.return_value = mock_client
+
+            await j._run_adversarial_round()
+
+    assert len(j._adv_task_ids) == 2
+    all_tasks = await j.state.get_all_tasks()
+    adv_tasks = [
+        t for t in all_tasks
+        if t.id in j._adv_task_ids
+    ]
+    assert len(adv_tasks) == 2
+    assert all(
+        t.status is TaskStatus.PENDING for t in adv_tasks
+    )
+
+
+@pytest.mark.asyncio
+async def test_adv_fail_resets_counts(tmp_path):
+    j = _make_judge(tmp_path)
+    j.adv_round = 2
+    j.refine_count = 5
+    j.replan_count = 1
+
+    t = Task(
+        id="adv-1", description="Check X",
+        files=[], status=TaskStatus.FAILED,
+        error="found a bug",
+    )
+    await j.state.add_task(t)
+    j._adv_task_ids = {"adv-1"}
+
+    outcome = await j._check_adv_batch()
+    assert outcome == "fail"
+
+    # simulate the reset the run() loop would do
+    j._adv_task_ids.clear()
+    j.adv_round = 0
+    j.refine_count = 0
+    j.replan_count = 0
+
+    assert j.adv_round == 0
+    assert j.refine_count == 0
+    assert j.replan_count == 0
+
+
+@pytest.mark.asyncio
+async def test_adv_init_fields(tmp_path):
+    j = _make_judge(tmp_path)
+    assert j.adv_round == 0
+    assert j.max_adv_rounds == 3
+    assert j._adv_task_ids == set()

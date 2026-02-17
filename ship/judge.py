@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
+import re
+import uuid
 
 from ship.claude_code import ClaudeCodeClient
 from ship.display import display, log_entry, write_progress_md
 from ship.prompts import JUDGE_TASK
+from ship.prompts import VERIFIER
 from ship.refiner import Refiner
 from ship.replanner import Replanner
 from ship.state import StateManager
@@ -60,6 +64,9 @@ class Judge:
             session_id=session_id,
         )
         self._completed_queue: list[Task] = []
+        self.adv_round = 0
+        self.max_adv_rounds = 3
+        self._adv_task_ids: set[str] = set()
 
     def set_worker_task(self, worker_id: str, desc: str) -> None:
         self.worker_tasks[worker_id] = desc
@@ -127,6 +134,95 @@ class Judge:
             total, completed, running, pending, failed, workers,
         )
 
+    def _parse_challenges(self, text: str) -> list[str]:
+        """extract challenge texts from <challenge> tags"""
+        return [
+            c.strip() for c in
+            re.findall(
+                r"<challenge>(.*?)</challenge>",
+                text, re.DOTALL,
+            )
+            if c.strip()
+        ]
+
+    async def _run_adversarial_round(self) -> None:
+        """generate challenges and queue 2 random ones"""
+        work = self.state.get_work_state()
+        if not work:
+            return
+
+        verifier = ClaudeCodeClient(
+            model="sonnet", role="verifier",
+        )
+        prompt = VERIFIER.format(
+            goal_text=work.goal_text[:2000],
+            project_context=self.project_context,
+        )
+
+        display.event(
+            f"  adversarial round {self.adv_round + 1}"
+            f"/{self.max_adv_rounds}..."
+        )
+
+        try:
+            result, _ = await verifier.execute(
+                prompt, timeout=90
+            )
+        except RuntimeError as e:
+            logging.warning(f"verifier failed: {e}")
+            display.event(f"  verifier failed: {e}")
+            return
+
+        challenges = self._parse_challenges(result)
+        if not challenges:
+            logging.warning("verifier returned no challenges")
+            display.event("  verifier: no challenges found")
+            return
+
+        picked = random.sample(
+            challenges, min(2, len(challenges))
+        )
+
+        self._adv_task_ids.clear()
+        for desc in picked:
+            task = Task(
+                id=str(uuid.uuid4()),
+                description=desc,
+                files=[],
+                status=TaskStatus.PENDING,
+            )
+            await self.state.add_task(task)
+            await self.queue.put(task)
+            self._adv_task_ids.add(task.id)
+            log_entry(f"adv challenge: {desc[:50]}")
+
+        display.event(
+            f"  queued {len(picked)} adversarial challenges"
+        )
+
+    async def _check_adv_batch(self) -> str:
+        """check if adversarial tasks finished
+
+        returns: "pending", "pass", or "fail"
+        """
+        all_tasks = await self.state.get_all_tasks()
+        adv_tasks = [
+            t for t in all_tasks
+            if t.id in self._adv_task_ids
+        ]
+
+        for t in adv_tasks:
+            if t.status in (
+                TaskStatus.PENDING, TaskStatus.RUNNING,
+            ):
+                return "pending"
+
+        for t in adv_tasks:
+            if t.status is TaskStatus.FAILED:
+                return "fail"
+
+        return "pass"
+
     async def run(self) -> None:
         """poll -> judge tasks -> retry -> refine -> replan"""
         logging.info("judge starting")
@@ -148,6 +244,7 @@ class Judge:
                 failed = [
                     t for t in all_tasks
                     if t.status is TaskStatus.FAILED
+                    and t.id not in self._adv_task_ids
                 ]
                 for task in failed:
                     # skip cascade failures (not retryable)
@@ -180,6 +277,41 @@ class Judge:
                         f"({task.retries + 1}"
                         f"/{MAX_RETRIES})"
                     )
+
+                # check adversarial batch in progress
+                if self._adv_task_ids:
+                    outcome = await self._check_adv_batch()
+                    if outcome == "pending":
+                        continue
+                    if outcome == "fail":
+                        display.event(
+                            "  adversarial challenge failed"
+                            " — re-entering refine cycle"
+                        )
+                        log_entry("adv fail: resetting")
+                        self._adv_task_ids.clear()
+                        self.adv_round = 0
+                        self.refine_count = 0
+                        self.replan_count = 0
+                        continue
+                    # pass
+                    self.adv_round += 1
+                    self._adv_task_ids.clear()
+                    display.event(
+                        f"  adversarial round"
+                        f" {self.adv_round}"
+                        f"/{self.max_adv_rounds} passed"
+                    )
+                    if self.adv_round >= self.max_adv_rounds:
+                        display.clear_status()
+                        display.event(
+                            "  all tasks complete"
+                            " (adversarial verified)"
+                        )
+                        logging.info("goal satisfied")
+                        await self.state.mark_complete()
+                        return
+                    continue
 
                 if not await self.state.is_complete():
                     continue
@@ -222,12 +354,9 @@ class Judge:
                             await self.queue.put(task)
                         continue
 
-                # done
-                display.clear_status()
-                display.event("  all tasks complete")
-                logging.info("goal satisfied")
-                await self.state.mark_complete()
-                return
+                # enter adversarial verification
+                await self._run_adversarial_round()
+                continue
 
         except asyncio.CancelledError:
             logging.info("judge stopping")

@@ -341,6 +341,29 @@ Or if complete:
 <tasks>
 </tasks>"""
 
+VERIFIER = """\
+You are an adversarial reviewer. Prove the objective is NOT met.
+
+Objective:
+{goal_text}
+
+Project: {project_context}
+
+Read the codebase. Generate exactly 10 concrete challenges \
+that could expose the objective as incomplete or broken.
+
+Rules:
+- Stay strictly within the stated objective
+- Do NOT invent requirements not in the objective
+- Each challenge must be a task a coding agent can execute
+- Be adversarial: target integration gaps, edge cases, \
+silent failures
+- Phrase each as imperative: "Verify that...", "Check that..."
+
+<challenges>
+<challenge>specific check to run</challenge>
+</challenges>"""
+
 REPLANNER = """\
 Full project assessment. Compare the original goal against what was \
 actually built.
