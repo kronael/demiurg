@@ -398,35 +398,27 @@ def _make_judge(tmp_path, session_id="test-sess"):
     )
 
 
-def test_parse_challenges():
-    judge = _make_judge.__wrapped__(None) if hasattr(
-        _make_judge, "__wrapped__"
-    ) else None
-    # test _parse_challenges directly via a fresh Judge
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        j = _make_judge(td)
-        text = (
-            "<challenges>\n"
-            "<challenge>Verify that X works</challenge>\n"
-            "<challenge>Check that Y handles Z</challenge>\n"
-            "<challenge>  </challenge>\n"
-            "</challenges>"
-        )
-        result = j._parse_challenges(text)
-        assert len(result) == 2
-        assert result[0] == "Verify that X works"
-        assert result[1] == "Check that Y handles Z"
+def test_parse_challenges(tmp_path):
+    j = _make_judge(tmp_path)
+    text = (
+        "<challenges>\n"
+        "<challenge>Verify that X works</challenge>\n"
+        "<challenge>Check that Y handles Z</challenge>\n"
+        "<challenge>  </challenge>\n"
+        "</challenges>"
+    )
+    result = j._parse_challenges(text)
+    assert len(result) == 2
+    assert result[0] == "Verify that X works"
+    assert result[1] == "Check that Y handles Z"
 
 
-def test_parse_challenges_empty():
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        j = _make_judge(td)
-        assert j._parse_challenges("no tags here") == []
-        assert j._parse_challenges(
-            "<challenges></challenges>"
-        ) == []
+def test_parse_challenges_empty(tmp_path):
+    j = _make_judge(tmp_path)
+    assert j._parse_challenges("no tags here") == []
+    assert j._parse_challenges(
+        "<challenges></challenges>"
+    ) == []
 
 
 @pytest.mark.asyncio
@@ -558,3 +550,73 @@ async def test_adv_init_fields(tmp_path):
     assert j.adv_round == 0
     assert j.max_adv_rounds == 3
     assert j._adv_task_ids == set()
+    assert j._adv_attempts == 0
+    assert j.max_adv_attempts == 3
+    assert j._seen_challenges == set()
+
+
+@pytest.mark.asyncio
+async def test_adv_round_dedup(tmp_path):
+    """seen challenges are filtered in subsequent rounds"""
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build a web app")
+
+    challenges_xml = (
+        "<challenges>\n"
+        "<challenge>Verify the server starts</challenge>\n"
+        "<challenge>Check error handling works</challenge>\n"
+        "<challenge>Verify tests pass cleanly</challenge>\n"
+        "</challenges>"
+    )
+
+    with patch(
+        "ship.judge.ClaudeCodeClient"
+    ) as mock_cls:
+        mock_client = AsyncMock()
+        mock_client.execute = AsyncMock(
+            return_value=(challenges_xml, "")
+        )
+        mock_cls.return_value = mock_client
+
+        # first round picks 2
+        gave_up = await j._run_adversarial_round()
+        assert not gave_up
+        assert len(j._adv_task_ids) == 2
+        first_seen = set(j._seen_challenges)
+        assert len(first_seen) == 2
+
+        # second round: same challenges, only 1 novel
+        j._adv_task_ids.clear()
+        gave_up = await j._run_adversarial_round()
+        assert not gave_up
+        assert len(j._adv_task_ids) == 1
+        assert len(j._seen_challenges) == 3
+
+
+@pytest.mark.asyncio
+async def test_adv_max_attempts(tmp_path):
+    """stops after max_adv_attempts failures"""
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build something")
+    j._adv_attempts = 3  # already at max
+
+    gave_up = await j._run_adversarial_round()
+    assert gave_up is True
+
+
+@pytest.mark.asyncio
+async def test_check_adv_batch_missing_tasks(tmp_path):
+    """returns pending when not all adv tasks found"""
+    j = _make_judge(tmp_path)
+    await j.state.init_work("test.txt", "build something")
+
+    # add one task but reference two IDs
+    task = Task(
+        id="adv-1", description="Verify X",
+        files=[], status=TaskStatus.COMPLETED,
+    )
+    await j.state.add_task(task)
+    j._adv_task_ids = {"adv-1", "adv-missing"}
+
+    result = await j._check_adv_batch()
+    assert result == "pending"

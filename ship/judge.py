@@ -67,6 +67,9 @@ class Judge:
         self.adv_round = 0
         self.max_adv_rounds = 3
         self._adv_task_ids: set[str] = set()
+        self._adv_attempts = 0
+        self.max_adv_attempts = 3
+        self._seen_challenges: set[str] = set()
 
     def set_worker_task(self, worker_id: str, desc: str) -> None:
         self.worker_tasks[worker_id] = desc
@@ -145,11 +148,22 @@ class Judge:
             if c.strip()
         ]
 
-    async def _run_adversarial_round(self) -> None:
-        """generate challenges and queue 2 random ones"""
+    async def _run_adversarial_round(self) -> bool:
+        """generate challenges and queue 2 random ones
+
+        returns True if max attempts exhausted (treat as done)
+        """
+        self._adv_attempts += 1
+        if self._adv_attempts > self.max_adv_attempts:
+            display.event(
+                "  adversarial: max attempts exhausted"
+            )
+            logging.warning("adversarial max attempts reached")
+            return True
+
         work = self.state.get_work_state()
         if not work:
-            return
+            return True
 
         verifier = ClaudeCodeClient(
             model="sonnet", role="verifier",
@@ -171,17 +185,29 @@ class Judge:
         except RuntimeError as e:
             logging.warning(f"verifier failed: {e}")
             display.event(f"  verifier failed: {e}")
-            return
+            return False
 
         challenges = self._parse_challenges(result)
         if not challenges:
             logging.warning("verifier returned no challenges")
             display.event("  verifier: no challenges found")
-            return
+            return False
+
+        # dedup against previously seen challenges
+        novel = [
+            c for c in challenges
+            if c not in self._seen_challenges
+        ]
+        if not novel:
+            logging.warning("all challenges already seen")
+            display.event("  verifier: no novel challenges")
+            return False
 
         picked = random.sample(
-            challenges, min(2, len(challenges))
+            novel, min(2, len(novel))
         )
+        for c in picked:
+            self._seen_challenges.add(c)
 
         self._adv_task_ids.clear()
         for desc in picked:
@@ -199,6 +225,7 @@ class Judge:
         display.event(
             f"  queued {len(picked)} adversarial challenges"
         )
+        return False
 
     async def _check_adv_batch(self) -> str:
         """check if adversarial tasks finished
@@ -210,6 +237,9 @@ class Judge:
             t for t in all_tasks
             if t.id in self._adv_task_ids
         ]
+
+        if len(adv_tasks) != len(self._adv_task_ids):
+            return "pending"
 
         for t in adv_tasks:
             if t.status in (
@@ -290,6 +320,7 @@ class Judge:
                         )
                         log_entry("adv fail: resetting")
                         self._adv_task_ids.clear()
+                        self._seen_challenges.clear()
                         self.adv_round = 0
                         self.refine_count = 0
                         self.replan_count = 0
@@ -355,7 +386,16 @@ class Judge:
                         continue
 
                 # enter adversarial verification
-                await self._run_adversarial_round()
+                gave_up = await self._run_adversarial_round()
+                if gave_up:
+                    display.clear_status()
+                    display.event(
+                        "  all tasks complete"
+                        " (adversarial exhausted)"
+                    )
+                    logging.info("goal satisfied (adv exhausted)")
+                    await self.state.mark_complete()
+                    return
                 continue
 
         except asyncio.CancelledError:
