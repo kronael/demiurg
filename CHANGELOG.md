@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-02-17)
+
+### Changed
+- project version bumped to 0.4.0 in `pyproject.toml`
+- lockfile metadata refreshed for editable `ship` package version
+
 ## 0.3.0 (2026-02-16)
 
 ### Changed
