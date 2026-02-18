@@ -62,8 +62,9 @@ plan that workers will follow. Format:
 THEN: Return ONLY this XML:
 
 <project>
-<context>Brief 1-2 sentence description of what's being built and key \
-technologies</context>
+<context>4-6 sentences: what's being built, key technologies, main \
+modules/files, important patterns or constraints workers must know. \
+This is the only context workers get — make it count.</context>
 <mode>parallel|sequential</mode>
 <tasks>
 <task worker="auto">Create go.mod with module name and dependencies</task>
@@ -98,6 +99,10 @@ earlier tasks (1-indexed). Tasks without depends can run in parallel"""
 
 WORKER = """\
 {context}\
+Before starting: read PLAN.md (execution plan) and CLAUDE.md (project \
+patterns) if they exist — they contain architecture and conventions \
+that will save you from re-exploring the codebase.
+
 You have a {timeout_min}-minute timeout. If you time out, the task \
 will be retried automatically. Focus on making progress.
 
