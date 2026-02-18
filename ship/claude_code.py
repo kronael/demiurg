@@ -113,6 +113,8 @@ class ClaudeCodeClient:
         try:
             lines: list[str] = []
             async with asyncio.timeout(timeout):
+                assert proc.stdout is not None
+                assert proc.stderr is not None
                 async for raw in proc.stdout:
                     line = raw.decode()
                     lines.append(line)

@@ -71,6 +71,8 @@ class CodexClient:
         )
 
         timed_out = False
+        stdout = b""
+        stderr = b""
         try:
             async with asyncio.timeout(timeout):
                 stdout, stderr = await proc.communicate(input=prompt.encode())
