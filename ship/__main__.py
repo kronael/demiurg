@@ -4,7 +4,6 @@ import asyncio
 import logging
 import signal
 import sys
-import uuid
 from pathlib import Path
 
 import click
@@ -161,10 +160,7 @@ async def _main(
             sys.exit(1)
 
         display.event("\033[36m⟳\033[0m validating spec...")
-        validator = Validator(
-            verbosity=cfg.verbosity,
-            session_id=str(uuid.uuid4()),
-        )
+        validator = Validator(verbosity=cfg.verbosity)
         validation = await validator.validate(goal_text, context=inline_context)
         display.event("\033[32m✓\033[0m spec ok")
         if not validation.accept:
@@ -205,11 +201,7 @@ async def _main(
         await state.init_work(design_file, combined_goal)
 
         display.event("\033[36m⟳\033[0m planning tasks...")
-        planner = Planner(
-            cfg,
-            state,
-            session_id=str(uuid.uuid4()),
-        )
+        planner = Planner(cfg, state)
         tasks = await planner.plan_once()
 
         if not tasks:
@@ -257,7 +249,6 @@ async def _main(
         queue,
         project_context=project_context,
         verbosity=cfg.verbosity,
-        session_id=str(uuid.uuid4()),
         use_codex=cfg.use_codex,
     )
     worker_list = [
@@ -267,7 +258,6 @@ async def _main(
             state,
             project_context=project_context,
             judge=judge,
-            session_id=str(uuid.uuid4()),
         )
         for i in range(num_workers)
     ]

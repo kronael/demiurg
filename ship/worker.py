@@ -28,7 +28,6 @@ class Worker:
         state: StateManager,
         project_context: str = "",
         judge: Judge | None = None,
-        session_id: str | None = None,
     ):
         self.worker_id = worker_id
         self.cfg = cfg
@@ -40,7 +39,6 @@ class Worker:
             model="sonnet",
             max_turns=cfg.max_turns,
             role=f"worker-{worker_id}",
-            session_id=session_id,
         )
 
     async def run(self, queue: asyncio.Queue[Task]) -> None:
@@ -73,9 +71,6 @@ class Worker:
                 f"{skills_text}\n\nUse the relevant skills above for this task.\n\n"
                 if skills_text else ""
             )
-            if task.session_id and not self.claude.session_id:
-                self.claude.session_id = task.session_id
-                self.claude._session_started = True
             prompt = WORKER.format(
                 context=context,
                 skills=skills,
@@ -97,7 +92,7 @@ class Worker:
                     min_level=1,
                 )
 
-            result, sid = await self.claude.execute(
+            result, _ = await self.claude.execute(
                 prompt,
                 timeout=self.cfg.task_timeout,
                 on_progress=on_progress,
@@ -108,7 +103,6 @@ class Worker:
                     task.id,
                     TaskStatus.FAILED,
                     error="reached max turns",
-                    session_id=sid,
                 )
                 log_entry(f"fail (max turns): {task.description[:60]}")
                 display.event(
@@ -125,7 +119,6 @@ class Worker:
                     TaskStatus.FAILED,
                     error="worker reported partial",
                     result=result,
-                    session_id=sid,
                     followups=followups,
                 )
                 log_entry(f"partial: {task.description[:60]}")
@@ -141,7 +134,6 @@ class Worker:
                 task.id,
                 TaskStatus.COMPLETED,
                 result=result,
-                session_id=sid,
             )
             if self.judge:
                 updated = Task(
@@ -150,7 +142,6 @@ class Worker:
                     files=task.files,
                     status=TaskStatus.COMPLETED,
                     result=result,
-                    session_id=sid,
                 )
                 self.judge.notify_completed(updated)
             git_summary = await self._git_diff_stat(head_before)
@@ -168,7 +159,6 @@ class Worker:
                 task.id,
                 TaskStatus.FAILED,
                 error=error_msg,
-                session_id=e.session_id,
             )
             if "timeout" in error_msg.lower():
                 display.event(

@@ -19,7 +19,6 @@ class Replanner:
         state: StateManager,
         project_context: str = "",
         verbosity: int = 1,
-        session_id: str | None = None,
     ):
         self.state = state
         self.project_context = project_context
@@ -27,7 +26,6 @@ class Replanner:
         self.claude = ClaudeCodeClient(
             model="sonnet",
             role="replanner",
-            session_id=session_id,
         )
 
     async def replan(self) -> list[Task]:

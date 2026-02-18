@@ -388,14 +388,13 @@ def test_is_cascade_error():
 # -- adversarial verification tests --
 
 
-def _make_judge(tmp_path, session_id="test-sess"):
+def _make_judge(tmp_path):
     state = StateManager(str(tmp_path))
     queue = asyncio.Queue()
     return Judge(
         state=state,
         queue=queue,
         project_context="test project",
-        session_id=session_id,
     )
 
 
@@ -661,7 +660,7 @@ from ship.claude_code import ClaudeError
 
 @pytest.mark.asyncio
 async def test_execute_streams_stdout():
-    client = ClaudeCodeClient(session_id=None)
+    client = ClaudeCodeClient()
     fake = FakeProcess([b"hello\n", b"world\n"])
 
     with patch(
@@ -676,7 +675,7 @@ async def test_execute_streams_stdout():
 
 @pytest.mark.asyncio
 async def test_execute_calls_progress_callback():
-    client = ClaudeCodeClient(session_id=None)
+    client = ClaudeCodeClient()
     lines = [
         b"working...\n",
         b"<progress>step 1 done</progress>\n",
@@ -701,7 +700,7 @@ async def test_execute_calls_progress_callback():
 
 @pytest.mark.asyncio
 async def test_execute_no_progress_without_callback():
-    client = ClaudeCodeClient(session_id=None)
+    client = ClaudeCodeClient()
     lines = [
         b"<progress>ignored</progress>\n",
         b"output here\n",
@@ -719,7 +718,7 @@ async def test_execute_no_progress_without_callback():
 
 @pytest.mark.asyncio
 async def test_execute_error_uses_stderr():
-    client = ClaudeCodeClient(session_id=None)
+    client = ClaudeCodeClient()
     fake = FakeProcess(
         lines=[b"some output\n"],
         stderr=b"something went wrong",

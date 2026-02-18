@@ -35,7 +35,6 @@ class Judge:
         max_refine_rounds: int = 10,
         max_replan_rounds: int = 1,
         verbosity: int = 1,
-        session_id: str | None = None,
         use_codex: bool = False,
     ):
         self.state = state
@@ -51,7 +50,6 @@ class Judge:
         self.claude = ClaudeCodeClient(
             model="sonnet",
             role="judge",
-            session_id=str(uuid.uuid4()),
         )
         self.refiner = Refiner(
             state,
@@ -62,7 +60,6 @@ class Judge:
             state,
             project_context,
             verbosity=verbosity,
-            session_id=session_id,
         )
         self._completed_queue: list[Task] = []
         self.adv_round = 0

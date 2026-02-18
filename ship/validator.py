@@ -20,13 +20,11 @@ class Validator:
     def __init__(
         self,
         verbosity: int = 1,
-        session_id: str | None = None,
     ):
         self.verbosity = verbosity
         self.claude = ClaudeCodeClient(
             model="sonnet",
             role="validator",
-            session_id=session_id,
         )
 
     async def validate(

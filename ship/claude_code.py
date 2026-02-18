@@ -6,16 +6,13 @@ import logging
 import os
 import re
 import signal
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 class ClaudeError(RuntimeError):
-    def __init__(self, message: str, session_id: str = ""):
-        super().__init__(message)
-        self.session_id = session_id
+    pass
 
 
 class ClaudeCodeClient:
@@ -66,7 +63,6 @@ class ClaudeCodeClient:
         max_turns: int | None = None,
         allowed_tools: list[str] | None = None,
         role: str = "unknown",
-        session_id: str | None = None,
     ):
         self.model = model
         self.cwd = cwd
@@ -74,8 +70,6 @@ class ClaudeCodeClient:
         self.max_turns = max_turns
         self.allowed_tools = allowed_tools or self.DEFAULT_ALLOWED_TOOLS
         self.role = role
-        self.session_id = session_id
-        self._session_started = False
         self._proc: asyncio.subprocess.Process | None = None
 
     async def execute(
@@ -90,8 +84,6 @@ class ClaudeCodeClient:
             "--model", self.model,
             "--permission-mode", self.permission_mode,
         ]
-        if self.session_id and self._session_started:
-            args.extend(["--resume", self.session_id])
         if self.max_turns is not None:
             args.extend(["--max-turns", str(self.max_turns)])
         if self.allowed_tools:
@@ -105,8 +97,6 @@ class ClaudeCodeClient:
             start_new_session=True,
         )
         self._proc = proc
-
-        sid = self.session_id or ""
 
         try:
             lines: list[str] = []
@@ -131,10 +121,7 @@ class ClaudeCodeClient:
         except TimeoutError:
             await self._kill_proc(proc)
             self._trace(len(prompt), 0, timeout, False)
-            raise ClaudeError(
-                f"claude CLI timeout after {timeout}s",
-                session_id=sid,
-            )
+            raise ClaudeError(f"claude CLI timeout after {timeout}s")
         finally:
             self._proc = None
 
@@ -142,31 +129,14 @@ class ClaudeCodeClient:
 
         if proc.returncode != 0:
             error = stderr_bytes.decode().strip() or output
-            if "already in use" in error:
-                logging.warning(
-                    "session collision, retrying with fresh session_id"
-                )
-                self.session_id = str(uuid.uuid4())
-                self._session_started = False
-                return await self.execute(
-                    prompt, timeout, on_progress
-                )
             self._trace(len(prompt), 0, timeout, False)
-            raise ClaudeError(
-                f"claude CLI failed: {error}",
-                session_id=sid,
-            )
+            raise ClaudeError(f"claude CLI failed: {error}")
 
         if not output:
-            raise ClaudeError(
-                "claude CLI returned empty output",
-                session_id=sid,
-            )
+            raise ClaudeError("claude CLI returned empty output")
 
-        if self.session_id:
-            self._session_started = True
         self._trace(len(prompt), len(output), timeout, True)
-        return output, sid
+        return output, ""
 
     @staticmethod
     async def _kill_proc(proc: asyncio.subprocess.Process) -> None:

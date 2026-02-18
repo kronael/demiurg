@@ -18,14 +18,12 @@ class Planner:
         self,
         cfg: Config,
         state: StateManager,
-        session_id: str | None = None,
     ):
         self.cfg = cfg
         self.state = state
         self.claude = ClaudeCodeClient(
             model="sonnet",
             role="planner",
-            session_id=session_id,
         )
 
     async def plan_once(self) -> list[Task]:
