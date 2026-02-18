@@ -13,7 +13,7 @@ test:
 	uv run pytest -v
 
 smoke:
-	uv run pytest -v
+	uv run pytest -v -m smoke
 
 right:
 	uv run pyright ship/

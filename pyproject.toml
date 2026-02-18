@@ -39,5 +39,10 @@ ship = "ship.__main__:run"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+markers = ["smoke: integration tests hitting real APIs"]
+addopts = "-m 'not smoke'"
+asyncio_mode = "auto"
+
 [tool.hatch.build.targets.wheel]
 packages = ["ship"]

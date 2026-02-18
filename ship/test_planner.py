@@ -26,6 +26,7 @@ def config(tmp_path):
         max_turns=5,
         task_timeout=120,
         verbosity=1,
+        use_codex=False,
     )
 
 
@@ -620,3 +621,227 @@ async def test_check_adv_batch_missing_tasks(tmp_path):
 
     result = await j._check_adv_batch()
     assert result == "pending"
+
+
+# -- ClaudeCodeClient.execute streaming + progress tests --
+
+
+async def _async_iter(lines: list[bytes]):
+    for line in lines:
+        yield line
+
+
+class _FakeReader:
+    def __init__(self, data: bytes = b""):
+        self._data = data
+
+    async def read(self) -> bytes:
+        return self._data
+
+
+class FakeProcess:
+    def __init__(
+        self,
+        lines: list[bytes],
+        stderr: bytes = b"",
+        returncode: int = 0,
+    ):
+        self.stdout = _async_iter(lines)
+        self.stderr = _FakeReader(stderr)
+        self.returncode = returncode
+        self.pid = 99999
+
+    async def wait(self):
+        pass
+
+
+from ship.claude_code import ClaudeCodeClient
+from ship.claude_code import ClaudeError
+
+
+@pytest.mark.asyncio
+async def test_execute_streams_stdout():
+    client = ClaudeCodeClient(session_id=None)
+    fake = FakeProcess([b"hello\n", b"world\n"])
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        output, _ = await client.execute("test prompt")
+
+    assert "hello" in output
+    assert "world" in output
+
+
+@pytest.mark.asyncio
+async def test_execute_calls_progress_callback():
+    client = ClaudeCodeClient(session_id=None)
+    lines = [
+        b"working...\n",
+        b"<progress>step 1 done</progress>\n",
+        b"<progress>step 2 done</progress>\n",
+        b"final output\n",
+    ]
+    fake = FakeProcess(lines)
+    progress: list[str] = []
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        output, _ = await client.execute(
+            "test",
+            on_progress=lambda msg: progress.append(msg),
+        )
+
+    assert progress == ["step 1 done", "step 2 done"]
+    assert "final output" in output
+
+
+@pytest.mark.asyncio
+async def test_execute_no_progress_without_callback():
+    client = ClaudeCodeClient(session_id=None)
+    lines = [
+        b"<progress>ignored</progress>\n",
+        b"output here\n",
+    ]
+    fake = FakeProcess(lines)
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        output, _ = await client.execute("test")
+
+    assert "output here" in output
+
+
+@pytest.mark.asyncio
+async def test_execute_error_uses_stderr():
+    client = ClaudeCodeClient(session_id=None)
+    fake = FakeProcess(
+        lines=[b"some output\n"],
+        stderr=b"something went wrong",
+        returncode=1,
+    )
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        with pytest.raises(ClaudeError, match="something went wrong"):
+            await client.execute("test")
+
+
+# -- Worker._git_diff_stat tests --
+
+
+class _FakeGitProc:
+    """fake for git helpers that use proc.communicate()"""
+
+    def __init__(self, stdout: bytes = b"", returncode: int = 0):
+        self.returncode = returncode
+        self._stdout = stdout
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return self._stdout, b""
+
+
+@pytest.mark.asyncio
+async def test_git_diff_stat_full(config, state):
+    w = Worker("w0", config, state)
+    fake = _FakeGitProc(
+        b" 3 files changed, 120 insertions(+), 30 deletions(-)\n"
+    )
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        result = await w._git_diff_stat("abc123")
+
+    assert result == "3 files, +120/-30"
+
+
+@pytest.mark.asyncio
+async def test_git_diff_stat_inserts_only(config, state):
+    w = Worker("w0", config, state)
+    fake = _FakeGitProc(
+        b" 1 file changed, 5 insertions(+)\n"
+    )
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        result = await w._git_diff_stat("abc123")
+
+    assert result == "1 files, +5/-0"
+
+
+@pytest.mark.asyncio
+async def test_git_diff_stat_deletes_only(config, state):
+    w = Worker("w0", config, state)
+    fake = _FakeGitProc(
+        b" 2 files changed, 10 deletions(-)\n"
+    )
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        result = await w._git_diff_stat("abc123")
+
+    assert result == "2 files, +0/-10"
+
+
+@pytest.mark.asyncio
+async def test_git_diff_stat_empty(config, state):
+    w = Worker("w0", config, state)
+    fake = _FakeGitProc(b"\n")
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        result = await w._git_diff_stat("abc123")
+
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_git_diff_stat_no_old_head(config, state):
+    w = Worker("w0", config, state)
+    result = await w._git_diff_stat("")
+    assert result == ""
+
+
+# -- Worker._git_head tests --
+
+
+@pytest.mark.asyncio
+async def test_git_head_returns_sha(config, state):
+    w = Worker("w0", config, state)
+    fake = _FakeGitProc(b"deadbeef1234\n")
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        return_value=fake,
+    ):
+        result = await w._git_head()
+
+    assert result == "deadbeef1234"
+
+
+@pytest.mark.asyncio
+async def test_git_head_error_returns_empty(config, state):
+    w = Worker("w0", config, state)
+
+    with patch(
+        "asyncio.create_subprocess_exec",
+        side_effect=OSError("no git"),
+    ):
+        result = await w._git_head()
+
+    assert result == ""

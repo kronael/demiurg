@@ -88,7 +88,20 @@ class Worker:
                 display.event(f"{'=' * 60}", min_level=3)
                 display.event(prompt, min_level=3)
                 display.event(f"{'=' * 60}\n", min_level=3)
-            result, sid = await self.claude.execute(prompt, timeout=self.cfg.task_timeout)
+
+            head_before = await self._git_head()
+
+            def on_progress(msg: str) -> None:
+                display.event(
+                    f"  [{self.worker_id}] {msg}",
+                    min_level=1,
+                )
+
+            result, sid = await self.claude.execute(
+                prompt,
+                timeout=self.cfg.task_timeout,
+                on_progress=on_progress,
+            )
 
             if "reached max turns" in result.lower():
                 await self.state.update_task(
@@ -140,8 +153,13 @@ class Worker:
                     session_id=sid,
                 )
                 self.judge.notify_completed(updated)
-            log_entry(f"done: {task.description[:60]}")
-            display.event(f"  [{self.worker_id}] done", min_level=2)
+            git_summary = await self._git_diff_stat(head_before)
+            suffix = f" ({git_summary})" if git_summary else ""
+            log_entry(f"done: {task.description[:60]}{suffix}")
+            display.event(
+                f"  [{self.worker_id}] done{suffix}",
+                min_level=2,
+            )
             logging.info(f"{self.worker_id} completed: {task.description}")
 
         except ClaudeError as e:
@@ -186,3 +204,40 @@ class Worker:
                 if d.strip()
             ]
         return status, followups
+
+    async def _git_head(self) -> str:
+        """snapshot current HEAD"""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "rev-parse", "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await proc.communicate()
+            return out.decode().strip()
+        except Exception:
+            return ""
+
+    async def _git_diff_stat(self, old_head: str) -> str:
+        """compact diff stat: '5 files, +120/-30'"""
+        if not old_head:
+            return ""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "diff", "--shortstat", old_head,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await proc.communicate()
+            text = out.decode().strip()
+            if not text:
+                return ""
+            files = re.search(r"(\d+) file", text)
+            ins = re.search(r"(\d+) insertion", text)
+            dels = re.search(r"(\d+) deletion", text)
+            f = files.group(1) if files else "0"
+            i = ins.group(1) if ins else "0"
+            d = dels.group(1) if dels else "0"
+            return f"{f} files, +{i}/-{d}"
+        except Exception:
+            return ""

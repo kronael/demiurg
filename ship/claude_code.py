@@ -4,8 +4,10 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,7 +78,12 @@ class ClaudeCodeClient:
         self._session_started = False
         self._proc: asyncio.subprocess.Process | None = None
 
-    async def execute(self, prompt: str, timeout: int = 120) -> tuple[str, str]:
+    async def execute(
+        self,
+        prompt: str,
+        timeout: int = 120,
+        on_progress: Callable[[str], None] | None = None,
+    ) -> tuple[str, str]:
         """returns (stdout, session_id); raises ClaudeError on failure/timeout"""
         args = [
             "claude", "-p", prompt,
@@ -104,8 +111,20 @@ class ClaudeCodeClient:
         sid = self.session_id or ""
 
         try:
+            lines: list[str] = []
             async with asyncio.timeout(timeout):
-                stdout, stderr = await proc.communicate()
+                async for raw in proc.stdout:
+                    line = raw.decode()
+                    lines.append(line)
+                    if on_progress:
+                        m = re.search(
+                            r"<progress>(.*?)</progress>",
+                            line,
+                        )
+                        if m:
+                            on_progress(m.group(1).strip())
+                stderr_bytes = await proc.stderr.read()
+                await proc.wait()
         except asyncio.CancelledError:
             await self._kill_proc(proc)
             raise
@@ -119,20 +138,25 @@ class ClaudeCodeClient:
         finally:
             self._proc = None
 
+        output = "".join(lines).strip()
+
         if proc.returncode != 0:
-            error = stderr.decode().strip() or stdout.decode().strip()
+            error = stderr_bytes.decode().strip() or output
             if "already in use" in error:
-                logging.warning("session collision, retrying with fresh session_id")
+                logging.warning(
+                    "session collision, retrying with fresh session_id"
+                )
                 self.session_id = str(uuid.uuid4())
                 self._session_started = False
-                return await self.execute(prompt, timeout)
+                return await self.execute(
+                    prompt, timeout, on_progress
+                )
             self._trace(len(prompt), 0, timeout, False)
             raise ClaudeError(
                 f"claude CLI failed: {error}",
                 session_id=sid,
             )
 
-        output = stdout.decode().strip()
         if not output:
             raise ClaudeError(
                 "claude CLI returned empty output",
@@ -146,30 +170,22 @@ class ClaudeCodeClient:
 
     @staticmethod
     async def _kill_proc(proc: asyncio.subprocess.Process) -> None:
-        """SIGTERM, wait 10s, then SIGKILL"""
+        """SIGTERM the process group, SIGKILL after 10s"""
         if proc.returncode is not None:
             return
-
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         except (OSError, ProcessLookupError):
-            try:
-                proc.terminate()
-            except (OSError, ProcessLookupError):
-                return
-
+            return
         try:
             await asyncio.wait_for(proc.wait(), timeout=10)
         except asyncio.TimeoutError:
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except (OSError, ProcessLookupError):
-                try:
-                    proc.kill()
-                except (OSError, ProcessLookupError):
-                    pass
+                pass
 
-    def _trace(self, prompt_len: int, response_len: int, duration_ms: int, ok: bool) -> None:
+    def _trace(self, prompt_len: int, response_len: int, timeout: int, ok: bool) -> None:
         trace_path = Path(".ship/log/trace.jl")
         try:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -181,7 +197,7 @@ class ClaudeCodeClient:
                 "model": self.model,
                 "prompt_len": prompt_len,
                 "response_len": response_len,
-                "duration_ms": duration_ms,
+                "timeout": timeout,
                 "ok": ok,
             }
             with open(trace_path, "a") as f:

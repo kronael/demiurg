@@ -13,7 +13,6 @@ from ship.config import Config
 from ship.display import display
 from ship.judge import Judge
 from ship.planner import Planner
-from ship.plan import run_plan
 from ship.state import StateManager
 from ship.types_ import Task, TaskStatus
 from ship.validator import Validator
@@ -48,13 +47,6 @@ def discover_spec(context: tuple[str, ...]) -> list[Path]:
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("context", nargs=-1)
-@click.option(
-    "-p",
-    "--plan",
-    "plan_",
-    is_flag=True,
-    help="[experimental] plan mode (see kronael/rsx for example)",
-)
 @click.option("-c", "--continue", "cont", is_flag=True, help="continue from last run")
 @click.option("-w", "--workers", type=int, help="number of parallel workers")
 @click.option("-t", "--timeout", type=int, help="task timeout in seconds")
@@ -64,7 +56,6 @@ def discover_spec(context: tuple[str, ...]) -> list[Path]:
 @click.option("-x", "--codex", is_flag=True, help="enable codex refiner (off by default)")
 def run(
     context: tuple[str, ...],
-    plan_: bool,
     cont: bool,
     workers: int | None,
     timeout: int | None,
@@ -82,10 +73,6 @@ def run(
         raise KeyboardInterrupt()
 
     signal.signal(signal.SIGTERM, _sigterm)
-
-    if plan_:
-        asyncio.run(run_plan(context))
-        return
 
     verbosity = 0 if quiet else min(1 + verbose, 3)
 
@@ -169,7 +156,7 @@ async def _main(
             inline_context = list(context)
         else:
             display.error(
-                "error: no spec found (try SPEC.md, specs/*.md, or ship -p)",
+                "error: no spec found (try SPEC.md, specs/*.md, or /planship)",
             )
             sys.exit(1)
 

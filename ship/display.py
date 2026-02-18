@@ -21,6 +21,8 @@ class Display:
         self._tasks: list[tuple[str, TaskStatus, str]] = []
         self._phase = "executing"
         self._panel_lines = 0
+        self._prev_statuses: dict[str, TaskStatus] = {}
+        self._plan_shown = False
 
     def banner(self, msg: str) -> None:
         """print header + separator"""
@@ -39,67 +41,120 @@ class Display:
     def set_phase(self, phase: str) -> None:
         self._phase = phase
 
-    def refresh(self) -> None:
-        """redraw the task panel in place (tty only)"""
-        if self.verbosity < 1 or not self.is_tty or not self._tasks:
+    def show_plan(self) -> None:
+        """print the full task list once (no cursor tricks)"""
+        if self.verbosity < 1 or not self._tasks:
             return
+        self._plan_shown = True
 
         cols = self._cols()
         total = len(self._tasks)
-        done = sum(1 for _, s, _ in self._tasks if s is TaskStatus.COMPLETED)
-        fail = sum(1 for _, s, _ in self._tasks if s is TaskStatus.FAILED)
-        run = sum(1 for _, s, _ in self._tasks if s is TaskStatus.RUNNING)
-
-        lines: list[str] = [""]
         w = len(str(total))
-        for i, (desc, status, worker) in enumerate(self._tasks):
+        print()
+        for i, (desc, status, _worker) in enumerate(self._tasks):
             tag = f"[{i + 1:>{w}}/{total}]"
             ind = {
                 TaskStatus.COMPLETED: "done",
                 TaskStatus.FAILED: "FAIL",
-                TaskStatus.RUNNING: f"{worker} ..." if worker else "...",
+                TaskStatus.RUNNING: "...",
             }.get(status, " -")
             pre = f"  {tag} "
             suf = f"  {ind}"
             avail = cols - len(pre) - len(suf)
             if avail > 0 and len(desc) > avail:
                 desc = desc[: avail - 1] + "\u2026"
-            lines.append(f"{pre}{desc:<{max(avail, 0)}}{suf}")
+            print(f"{pre}{desc:<{max(avail, 0)}}{suf}")
+        print()
 
-        lines.append("")
+        # seed prev statuses so first refresh only shows changes
+        self._prev_statuses = {
+            desc: status for desc, status, _ in self._tasks
+        }
+
+    def refresh(self) -> None:
+        """emit lines for tasks whose status changed, then summary"""
+        if self.verbosity < 1 or not self._tasks:
+            return
+
+        # non-tty: skip (event() already prints lines)
+        if not self.is_tty:
+            return
+
+        # emit change lines
+        for desc, status, worker in self._tasks:
+            prev = self._prev_statuses.get(desc)
+            if prev == status:
+                continue
+            self._prev_statuses[desc] = status
+            if status is TaskStatus.RUNNING:
+                tag = worker if worker else "..."
+                self._print_change(f"  [{tag}] launching: {desc}")
+            elif status is TaskStatus.COMPLETED:
+                self._print_change(f"  [--] done: {desc}")
+            elif status is TaskStatus.FAILED:
+                self._print_change(f"  [--] failed: {desc}")
+
+        # overwrite summary line in place
+        total = len(self._tasks)
+        done = sum(1 for _, s, _ in self._tasks if s is TaskStatus.COMPLETED)
+        fail = sum(1 for _, s, _ in self._tasks if s is TaskStatus.FAILED)
+        run = sum(1 for _, s, _ in self._tasks if s is TaskStatus.RUNNING)
+
         parts = [f"{done}/{total} ({done * 100 // total}%)"]
         if run:
             parts.append(f"{run} running")
         if fail:
             parts.append(f"{fail} failed")
-        lines.append(f"  {', '.join(parts)} {self._phase}")
-        lines.append("")
+        summary = f"  {', '.join(parts)}  {self._phase}"
 
-        # move cursor up to overwrite previous panel
         if self._panel_lines > 0:
             sys.stdout.write(f"\033[{self._panel_lines}A")
-        self._panel_lines = len(lines)
-        for line in lines:
-            sys.stdout.write(f"\033[K{line}\n")
+        self._panel_lines = 1
+        sys.stdout.write(f"\033[K{summary}\n")
+        sys.stdout.flush()
+
+    def _print_change(self, msg: str) -> None:
+        """print a change line above the summary"""
+        if self._panel_lines > 0:
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            sys.stdout.write(f"\033[K{msg}\n")
+            # re-reserve summary space
+            for _ in range(self._panel_lines):
+                sys.stdout.write("\n")
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+        else:
+            sys.stdout.write(f"{msg}\n")
         sys.stdout.flush()
 
     def event(self, msg: str, min_level: int = 1) -> None:
-        """print a log line above the panel"""
+        """print a log line above the summary"""
         if self.verbosity < min_level:
             return
         if self.is_tty and self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A\033[K{msg}\n")
-            saved = self._panel_lines
-            self._panel_lines = 0
-            self.refresh()
-            if self._panel_lines == 0:
-                self._panel_lines = saved
+            # insert line above summary
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            sys.stdout.write(f"\033[K{msg}\n")
+            # rewrite summary below
+            for _ in range(self._panel_lines):
+                sys.stdout.write("\n")
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            sys.stdout.flush()
         else:
             print(msg)
 
     def error(self, msg: str) -> None:
         """always print, even in quiet mode"""
         print(msg, file=sys.stderr)
+
+    def clear_status(self) -> None:
+        """clear the summary line"""
+        if self.is_tty and self._panel_lines > 0:
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            for _ in range(self._panel_lines):
+                sys.stdout.write("\033[K\n")
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            sys.stdout.flush()
+        self._panel_lines = 0
 
     def finish(self) -> None:
         """clear panel"""

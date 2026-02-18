@@ -114,6 +114,9 @@ class Judge:
         else:
             phase = "executing"
         display.set_phase(phase)
+
+        if not display._plan_shown:
+            display.show_plan()
         display.refresh()
 
         total = len(tasks)
