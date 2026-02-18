@@ -48,10 +48,10 @@ class Config:
             task_timeout = (
                 timeout
                 if timeout is not None
-                else int(os.getenv("TASK_TIMEOUT", "7200"))
+                else int(os.getenv("TASK_TIMEOUT", "2400"))
             )
             if max_turns is None:
-                max_turns = int(os.getenv("MAX_TURNS", "200"))
+                max_turns = int(os.getenv("MAX_TURNS", "50"))
         except ValueError as e:
             raise RuntimeError(f"invalid config value: {e}") from e
 

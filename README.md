@@ -20,8 +20,8 @@ ship spec.txt        # specify design file
 ship specs/          # ship from specs directory
 ship -c              # continue interrupted run
 ship -w 8            # 8 workers (default: 4)
-ship -t 3600         # 1hr timeout per task (default: 7200s)
-ship -m 50           # 50 agentic turns per task (default: 200)
+ship -t 1200         # 20min timeout per task (default: 2400s)
+ship -m 25           # 25 agentic turns per task (default: 50)
 ship -v              # verbose (show prompts/responses)
 ship -x              # enable codex refiner
 ```
@@ -102,8 +102,8 @@ optional `.env` in project root:
 
 ```
 NUM_WORKERS=4
-TASK_TIMEOUT=7200
-MAX_TURNS=200
+TASK_TIMEOUT=2400
+MAX_TURNS=50
 ```
 
 CLI args override env vars override .env file.
