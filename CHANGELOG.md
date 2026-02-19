@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.1 (2026-02-19)
+
+### Added
+- `ClaudeCodeClient.reformat()`: resumes session and requests only the
+  structured XML tags (`<summary>`, `<status>`, `<followups>`); used
+  when a completed task is missing its output tags
+- `execute()` detects `subtype: error_max_turns` in JSON response and
+  raises `ClaudeError("reached max turns", ...)` so the summarize flow
+  handles it consistently with timeouts
+
+### Changed
+- `worker.py`: removed fragile `"reached max turns" in result.lower()`
+  string match — max turns now detected via JSON subtype in `execute()`
+- after `_parse_output()`, if `<summary>` or `<status>` are absent and
+  a session_id is available, worker calls `reformat()` and re-parses;
+  if reformat succeeds the task is marked completed normally
+
 ## 0.6.0 (2026-02-19)
 
 ### Added

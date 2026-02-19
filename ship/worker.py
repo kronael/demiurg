@@ -93,20 +93,16 @@ class Worker:
                 on_progress=on_progress,
             )
 
-            if "reached max turns" in result.lower():
-                await self.state.update_task(
-                    task.id,
-                    TaskStatus.FAILED,
-                    error="reached max turns",
-                )
-                log_entry(f"fail (max turns): {task.description[:60]}")
-                display.event(
-                    f"  [{self.worker_id}] max turns - incomplete", min_level=2
-                )
-                logging.warning(f"{self.worker_id} max turns: {task.description}")
-                return
-
             status, followups, summary = self._parse_output(result)
+
+            # if XML tags are missing, resume session and ask for them
+            if session_id and (not summary or "<status>" not in result):
+                display.event(
+                    f"  [{self.worker_id}] reformatting output...", min_level=1
+                )
+                reformatted = await self.claude.reformat(session_id)
+                if reformatted:
+                    status, followups, summary = self._parse_output(reformatted)
 
             if status == "partial":
                 await self.state.update_task(

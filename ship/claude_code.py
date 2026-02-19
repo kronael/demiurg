@@ -137,10 +137,12 @@ class ClaudeCodeClient:
 
         raw_output = "".join(lines).strip()
         output = raw_output
+        subtype = ""
         try:
             data = json.loads(raw_output)
             output = data.get("result", raw_output)
             session_id = data.get("session_id", "")
+            subtype = data.get("subtype", "")
         except json.JSONDecodeError:
             pass
 
@@ -157,6 +159,13 @@ class ClaudeCodeClient:
         if not output:
             raise ClaudeError(
                 "claude CLI returned empty output",
+                session_id=session_id,
+            )
+
+        if subtype == "error_max_turns":
+            raise ClaudeError(
+                "reached max turns",
+                partial=output,
                 session_id=session_id,
             )
 
@@ -205,6 +214,48 @@ class ClaudeCodeClient:
         except Exception as e:
             logging.warning(f"summarize failed: {e}")
             return partial or "interrupted (no summary available)"
+
+    async def reformat(self, session_id: str) -> str:
+        """resume session and request only the structured XML output tags"""
+        prompt = (
+            "Your previous response is complete. "
+            "Now emit ONLY the required structured tags — nothing else:\n\n"
+            "If the work is done:\n"
+            "<summary>3-5 word outcome</summary>\n"
+            "<status>done</status>\n\n"
+            "If work was incomplete:\n"
+            "<summary>3-5 word outcome</summary>\n"
+            "<status>partial</status>\n"
+            "<followups>\n<task>remaining work description</task>\n</followups>"
+        )
+        args = [
+            "claude",
+            "--resume", session_id,
+            "-p", prompt,
+            "--model", self.model,
+            "--permission-mode", self.permission_mode,
+            "--output-format", "json",
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                cwd=self.cwd,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            async with asyncio.timeout(60):
+                out, _ = await proc.communicate()
+            raw = out.decode().strip()
+            try:
+                data = json.loads(raw)
+                return data.get("result", raw)
+            except json.JSONDecodeError:
+                return raw
+        except Exception as e:
+            logging.warning(f"reformat failed: {e}")
+            return ""
 
     @staticmethod
     async def _kill_proc(proc: asyncio.subprocess.Process) -> None:
