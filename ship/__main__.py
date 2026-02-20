@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import hashlib
 import logging
+import shutil
 import signal
 import sys
 from pathlib import Path
@@ -21,7 +23,31 @@ from ship.worker import Worker
 SPEC_CANDIDATES = ["SPEC.md", "spec.md"]
 
 
-VERSION = "0.6.1"
+VERSION = "0.6.4"
+
+
+def _has_real_state(data_dir: Path) -> bool:
+    return (data_dir / "work.json").exists() and (data_dir / "tasks.json").exists()
+
+
+def _wipe_state(data_dir: Path) -> None:
+    shutil.rmtree(data_dir, ignore_errors=True)
+
+
+def _spec_hash(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _load_validated_hash(data_dir: Path) -> str:
+    try:
+        return (data_dir / "validated").read_text().strip()
+    except OSError:
+        return ""
+
+
+def _save_validated_hash(data_dir: Path, h: str) -> None:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "validated").write_text(h + "\n")
 
 
 def _spec_slug(context: tuple[str, ...]) -> str | None:
@@ -58,15 +84,19 @@ def discover_spec(context: tuple[str, ...]) -> list[Path]:
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("context", nargs=-1)
 @click.option("-c", "--continue", "cont", is_flag=True, help="continue from last run")
+@click.option("-k", "--check", is_flag=True, help="validate spec only, then exit")
 @click.option("-w", "--workers", type=int, help="number of parallel workers")
 @click.option("-t", "--timeout", type=int, help="task timeout in seconds")
 @click.option("-m", "--max-turns", type=int, help="max agentic turns per task")
 @click.option("-v", "--verbose", count=True, help="increase verbosity (-v, -vv)")
 @click.option("-q", "--quiet", is_flag=True, help="errors only")
-@click.option("-x", "--codex", is_flag=True, help="enable codex refiner (off by default)")
+@click.option(
+    "-x", "--codex", is_flag=True, help="enable codex refiner (off by default)"
+)
 def run(
     context: tuple[str, ...],
     cont: bool,
+    check: bool,
     workers: int | None,
     timeout: int | None,
     max_turns: int | None,
@@ -87,7 +117,9 @@ def run(
     verbosity = 0 if quiet else min(1 + verbose, 3)
 
     try:
-        asyncio.run(_main(context, cont, workers, timeout, max_turns, verbosity, codex))
+        asyncio.run(
+            _main(context, cont, check, workers, timeout, max_turns, verbosity, codex)
+        )
     except KeyboardInterrupt:
         display.finish()
         display.error("\ninterrupted")
@@ -97,6 +129,7 @@ def run(
 async def _main(
     context: tuple[str, ...],
     cont: bool,
+    check: bool,
     workers: int | None,
     timeout: int | None,
     max_turns: int | None,
@@ -131,6 +164,45 @@ async def _main(
 
     logging.info("starting ship")
 
+    data_dir = Path(cfg.data_dir)
+
+    # on fresh runs (not -c): handle existing state
+    if not cont and not check:
+        if _has_real_state(data_dir):
+            # load to check completion status
+            try:
+                _probe = StateManager(cfg.data_dir)
+            except RuntimeError:
+                _probe = None
+            _work = _probe.get_work_state() if _probe else None
+            _tasks = await _probe.get_all_tasks() if _probe else []
+            _done = sum(1 for t in _tasks if t.status is TaskStatus.COMPLETED)
+            _total = len(_tasks)
+
+            if _work and _work.is_complete:
+                msg = f"previous run complete ({_done}/{_total} tasks)"
+            else:
+                msg = f"previous run found ({_done}/{_total} tasks done)"
+
+            if sys.stdin.isatty():
+                prompt = (
+                    f"ship: {msg}\n  -c to continue, Enter to start fresh, q to quit: "
+                )
+                ans = input(prompt).strip().lower()
+                if ans == "q":
+                    sys.exit(0)
+                elif ans == "c":
+                    cont = True
+                else:
+                    _wipe_state(data_dir)
+            else:
+                # non-TTY: wipe automatically
+                logging.info(f"non-tty: wiping state ({msg})")
+                _wipe_state(data_dir)
+        elif data_dir.exists():
+            # stale rejection or partial state with no real work — wipe silently
+            _wipe_state(data_dir)
+
     try:
         state = StateManager(cfg.data_dir)
     except RuntimeError as e:
@@ -138,7 +210,7 @@ async def _main(
         sys.exit(1)
 
     # exclusive non-blocking lock: bail if another ship owns this data_dir
-    lock_path = Path(cfg.data_dir) / "ship.lock"
+    lock_path = data_dir / "ship.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     _lock_fd = lock_path.open("w")
     try:
@@ -160,10 +232,7 @@ async def _main(
         # guard: no tasks in state means planning never completed
         _saved = await state.get_all_tasks()
         if not _saved:
-            display.error(
-                "error: no tasks in saved state"
-                " — run without -c to re-plan"
-            )
+            display.error("error: no tasks in saved state — run without -c to re-plan")
             sys.exit(1)
     else:
         # resolve spec
@@ -192,37 +261,55 @@ async def _main(
             )
             sys.exit(1)
 
-        display.event("\033[36m⟳\033[0m validating spec...")
-        validator = Validator(verbosity=cfg.verbosity)
-        validation = await validator.validate(goal_text, context=inline_context)
-        display.event("\033[32m✓\033[0m spec ok")
-        if not validation.accept:
-            rejection_path = Path(cfg.data_dir) / "REJECTION.md"
-            gaps_text = (
-                "\n".join(f"- {g}" for g in validation.gaps)
-                or "- (no details provided)"
-            )
-            rejection = (
-                "# REJECTION\n\n"
-                "The design is not specific enough to execute."
-                " Please address these gaps:\n\n"
-                f"{gaps_text}\n"
-            )
-            try:
-                rejection_path.write_text(rejection)
-            except OSError as e:
-                display.error(
-                    f"error: cannot write {rejection_path}: {e}",
-                )
-                sys.exit(1)
-            display.error(
-                f"error: design rejected (see {rejection_path})"
-            )
-            sys.exit(1)
+        # skip validation if spec unchanged since last accepted run
+        spec_h = _spec_hash(goal_text)
+        already_validated = _load_validated_hash(data_dir) == spec_h
 
-        project_text = validation.project_md.strip()
-        if project_text:
-            project_path = Path(cfg.data_dir) / "PROJECT.md"
+        if already_validated:
+            display.event("\033[32m✓\033[0m spec already validated")
+            validation_project_md = ""
+        else:
+            display.event("\033[36m⟳\033[0m validating spec...")
+            validator = Validator(verbosity=cfg.verbosity)
+            validation = await validator.validate(goal_text, context=inline_context)
+
+            if not validation.accept:
+                gaps_text = (
+                    "\n".join(f"- {g}" for g in validation.gaps)
+                    or "- (no details provided)"
+                )
+                rejection = (
+                    "# REJECTION\n\n"
+                    "The design is not specific enough to execute."
+                    " Please address these gaps:\n\n"
+                    f"{gaps_text}\n"
+                )
+                rejection_path = data_dir / "REJECTION.md"
+                data_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    rejection_path.write_text(rejection)
+                except OSError as e:
+                    display.error(f"error: cannot write {rejection_path}: {e}")
+                if verbosity >= 1:
+                    print("\nrejection gaps:")
+                    for g in validation.gaps:
+                        print(f"  - {g}")
+                    if verbosity >= 2:
+                        print()
+                        print(rejection)
+                display.error(f"error: design rejected (see {rejection_path})")
+                sys.exit(1)
+
+            _save_validated_hash(data_dir, spec_h)
+            display.event("\033[32m✓\033[0m spec ok")
+            validation_project_md = validation.project_md
+
+        if check:
+            sys.exit(0)
+
+        project_text = validation_project_md.strip() if not already_validated else ""
+        if not already_validated and project_text:
+            project_path = data_dir / "PROJECT.md"
             try:
                 project_path.write_text(project_text + "\n")
             except OSError as e:
@@ -232,7 +319,7 @@ async def _main(
         design_file = spec_label if spec_files else "<inline>"
         logging.info(f"new run: {design_file}")
         combined_goal = goal_text
-        if project_text:
+        if not already_validated and project_text:
             combined_goal = f"{goal_text}\n\n---\n\n# PROJECT\n\n{project_text}\n"
         await state.init_work(design_file, combined_goal)
 

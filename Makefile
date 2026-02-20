@@ -13,6 +13,7 @@ smoke:
 	uv run pytest -v -m smoke
 
 right:
+	uv run ruff check ship/
 	uv run pyright ship/
 
 image:
