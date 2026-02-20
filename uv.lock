@@ -207,14 +207,14 @@ wheels = [
 
 [[package]]
 name = "ship"
-version = "0.6.2"
+version = "0.6.3"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "python-dotenv" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
     { name = "pyright" },
@@ -225,13 +225,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=4.0.0" },
+    { name = "pyright", specifier = ">=1.1.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+]
 
 [[package]]
 name = "typing-extensions"

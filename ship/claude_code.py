@@ -83,10 +83,15 @@ class ClaudeCodeClient:
     ) -> tuple[str, str]:
         """returns (output, session_id); raises ClaudeError on failure/timeout"""
         args = [
-            "claude", "-p", prompt,
-            "--model", self.model,
-            "--permission-mode", self.permission_mode,
-            "--output-format", "json",
+            "claude",
+            "-p",
+            prompt,
+            "--model",
+            self.model,
+            "--permission-mode",
+            self.permission_mode,
+            "--output-format",
+            "json",
         ]
         if self.max_turns is not None:
             args.extend(["--max-turns", str(self.max_turns)])
@@ -189,11 +194,16 @@ class ClaudeCodeClient:
         )
         args = [
             "claude",
-            "--resume", session_id,
-            "-p", prompt,
-            "--model", self.model,
-            "--permission-mode", self.permission_mode,
-            "--output-format", "json",
+            "--resume",
+            session_id,
+            "-p",
+            prompt,
+            "--model",
+            self.model,
+            "--permission-mode",
+            self.permission_mode,
+            "--output-format",
+            "json",
         ]
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -209,7 +219,8 @@ class ClaudeCodeClient:
             raw = out.decode().strip()
             data = json.loads(raw)
             return data.get("result", raw)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            raw = e.doc or ""
             return raw
         except Exception as e:
             logging.warning(f"summarize failed: {e}")
@@ -230,11 +241,16 @@ class ClaudeCodeClient:
         )
         args = [
             "claude",
-            "--resume", session_id,
-            "-p", prompt,
-            "--model", self.model,
-            "--permission-mode", self.permission_mode,
-            "--output-format", "json",
+            "--resume",
+            session_id,
+            "-p",
+            prompt,
+            "--model",
+            self.model,
+            "--permission-mode",
+            self.permission_mode,
+            "--output-format",
+            "json",
         ]
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -274,14 +290,14 @@ class ClaudeCodeClient:
             except (OSError, ProcessLookupError):
                 pass
 
-    def _trace(self, prompt_len: int, response_len: int, timeout: int, ok: bool) -> None:
+    def _trace(
+        self, prompt_len: int, response_len: int, timeout: int, ok: bool
+    ) -> None:
         trace_path = Path(".ship/log/trace.jl")
         try:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             entry = {
-                "ts": datetime.now(timezone.utc).strftime(
-                    "%Y-%m-%dT%H:%M:%S"
-                ),
+                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
                 "role": self.role,
                 "model": self.model,
                 "prompt_len": prompt_len,

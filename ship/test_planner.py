@@ -346,7 +346,7 @@ async def test_cascade_skips_completed(tmp_path):
 
 def test_parse_output_done(config, state):
     w = Worker("w0", config, state)
-    status, followups = w._parse_output("did some work\n<status>done</status>")
+    status, followups, _ = w._parse_output("did some work\n<status>done</status>")
     assert status == "done"
     assert followups == []
 
@@ -361,7 +361,7 @@ def test_parse_output_partial_with_followups(config, state):
         "<task>add error handling</task>\n"
         "</followups>"
     )
-    status, followups = w._parse_output(text)
+    status, followups, _ = w._parse_output(text)
     assert status == "partial"
     assert len(followups) == 2
     assert followups[0] == "finish the remaining API"
@@ -369,7 +369,7 @@ def test_parse_output_partial_with_followups(config, state):
 
 def test_parse_output_no_tags(config, state):
     w = Worker("w0", config, state)
-    status, followups = w._parse_output("just plain text")
+    status, followups, _ = w._parse_output("just plain text")
     assert status == "done"
     assert followups == []
 
@@ -377,7 +377,7 @@ def test_parse_output_no_tags(config, state):
 def test_parse_output_empty_followups(config, state):
     w = Worker("w0", config, state)
     text = "<status>partial</status>\n<followups>\n</followups>"
-    status, followups = w._parse_output(text)
+    status, followups, _ = w._parse_output(text)
     assert status == "partial"
     assert followups == []
 
