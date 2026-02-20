@@ -1,4 +1,4 @@
-.PHONY: build test smoke clean run right image install
+.PHONY: build test smoke clean run right lint image install
 
 build:
 	uv sync --dev
@@ -12,8 +12,10 @@ test:
 smoke:
 	uv run pytest -v -m smoke
 
-right:
+lint:
 	uv run ruff check ship/
+
+right:
 	uv run pyright ship/
 
 image:
