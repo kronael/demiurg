@@ -77,9 +77,9 @@ class Refiner:
                 display.event("  refiner: no follow-up tasks")
             return new_tasks
         except RuntimeError as e:
-            logging.warning(f"refiner failed: {e}")
+            logging.warning(f"refiner timed out or errored: {e}")
             display.event(f"  refiner failed: {e}")
-            return []
+            raise
 
     def _parse_tasks(self, text: str) -> list[Task]:
         tasks = []

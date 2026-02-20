@@ -88,9 +88,9 @@ class Replanner:
                 display.event("  replanner: goal met")
             return new_tasks
         except RuntimeError as e:
-            logging.warning(f"replanner failed: {e}")
+            logging.warning(f"replanner timed out or errored: {e}")
             display.event(f"  replanner failed: {e}")
-            return []
+            raise
 
     def _parse_tasks(self, text: str) -> list[Task]:
         tasks = []

@@ -152,10 +152,9 @@ class Judge:
             if c.strip()
         ]
 
-    async def _run_adversarial_round(self) -> bool:
-        """returns True if max attempts exhausted"""
-        self._adv_attempts += 1
-        if self._adv_attempts > self.max_adv_attempts:
+    async def _run_adversarial_round(self) -> bool | None:
+        """returns True if max attempts exhausted, None if timed out (retry)"""
+        if self._adv_attempts >= self.max_adv_attempts:
             display.event("  verification: no more novel challenges")
             logging.warning("verification exhausted novel challenges")
             return True
@@ -181,9 +180,11 @@ class Judge:
         try:
             result, _ = await verifier.execute(prompt, timeout=90)
         except RuntimeError as e:
-            logging.warning(f"verifier failed: {e}")
+            logging.warning(f"verifier timed out or errored: {e}")
             display.event(f"  verifier failed: {e}")
-            return False
+            return None  # retry next cycle, don't consume attempt
+
+        self._adv_attempts += 1
 
         challenges = self._parse_challenges(result)
         if not challenges:
@@ -327,7 +328,11 @@ class Judge:
                         f"refining ({self.refine_count}/{self.max_refine_rounds})"
                     )
                     display.refresh()
-                    new_tasks = await self.refiner.refine()
+                    try:
+                        new_tasks = await self.refiner.refine()
+                    except RuntimeError:
+                        self.refine_count -= 1  # don't count timed-out attempt
+                        continue
                     if new_tasks:
                         log_entry(f"+{len(new_tasks)} from refiner")
                         display.event(f"  +{len(new_tasks)} follow-up tasks")
@@ -346,7 +351,11 @@ class Judge:
                         f"replanning ({self.replan_count}/{self.max_replan_rounds})"
                     )
                     display.refresh()
-                    new_tasks = await self.replanner.replan()
+                    try:
+                        new_tasks = await self.replanner.replan()
+                    except RuntimeError:
+                        self.replan_count -= 1  # don't count timed-out attempt
+                        continue
                     if new_tasks:
                         log_entry(f"+{len(new_tasks)} from replanner")
                         display.event(f"  +{len(new_tasks)} replanned tasks")
@@ -356,6 +365,8 @@ class Judge:
                         continue
 
                 gave_up = await self._run_adversarial_round()
+                if gave_up is None:
+                    continue  # timed out, retry next cycle
                 if gave_up:
                     display.clear_status()
                     display.event(
