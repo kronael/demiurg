@@ -20,9 +20,10 @@ ship                    # auto-discover SPEC.md / spec.md / specs/*.md
 ship <file>             # ship from file
 ship <dir>              # ship from dir
 ship <arg> <arg> ...    # args as context
-ship -c                 # continue from last run
+ship -f                 # wipe state, start fresh
 ship -k                 # validate spec only (exit 0/1)
-ship -w 8 -t 600 -m 10 # override workers/timeout/turns
+ship -n 8 -t 600 -m 10 # override workers/timeout/turns
+ship -p "use stdlib"    # inject override into all LLM calls
 ship -x                 # enable refiner (codex CLI critique)
 ship -v                 # verbose (-v: details, -vv: debug)
 ship -q                 # quiet (errors only)
@@ -61,11 +62,15 @@ config precedence: CLI args > env vars > .env file > defaults.
 ## shocking bits
 
 - `-k` runs validation then exits: 0=accepted, 1=rejected; writes .ship/validated cache
-- stale state (no work.json/tasks.json) is wiped silently on fresh run; real previous state prompts [c/N/q]
+- continuation is implicit: no state → fresh run; same spec + incomplete → auto-resumes; same spec + complete → prints "done, use -f to restart" and exits 0
+- spec changed: LLM call decides keep-completed-tasks (add on top) or replan-from-scratch
+- `-f` always wipes state; `-c` is a hidden alias kept for backwards compat
+- `-p TEXT` injects override prompt into validator, planner, worker, replanner/refiner/verifier; persisted in work.json so it survives across sessions
+- `-n` is the canonical workers flag; `-w` is a hidden alias kept for backwards compat
 - validation cache (.ship/validated) skips the LLM call entirely if spec SHA256 matches
 - rejection gaps printed to stdout at verbosity >= 1; full rejection text at >= 2
 - planner runs once at startup, not continuously
-- queue not persisted, rebuilt from pending tasks on -c
+- queue not persisted, rebuilt from pending tasks on resume
 - claude CLI called with `--permission-mode bypassPermissions` always
 - refiner uses codex CLI (cheaper/faster), replanner uses claude CLI (deeper)
 - refiner only runs when -x flag is set (use_codex: bool in config)
@@ -73,7 +78,7 @@ config precedence: CLI args > env vars > .env file > defaults.
 - failed tasks auto-retry up to 10 times (timeout is just cleanup)
 - planner told "2 day tasks" to get smaller chunks
 - planner can set execution mode (parallel/sequential) and pin tasks to workers
-- sequential mode: -w flag overrides the auto-reduction to 1 worker
+- sequential mode: -n flag overrides the auto-reduction to 1 worker
 - subprocess cleanup: SIGTERM, wait 10s, then SIGKILL
 - TUI sliding window: shows running tasks + next N pending (not all tasks)
 - workers read PLAN.md and CLAUDE.md before executing their task
@@ -91,8 +96,8 @@ project root (LLM-visible): SPEC.md, PLAN.md, PROGRESS.md, LOG.md, PROJECT.md
 
 ## key files
 
-- `__main__.py` - entry point, click CLI, main orchestrator (v0.6.5)
-- `types_.py` - Task (with worker field), TaskStatus, WorkState (with execution_mode)
+- `__main__.py` - entry point, click CLI, main orchestrator (v0.6.6)
+- `types_.py` - Task (with worker field), TaskStatus, WorkState (with execution_mode, spec_hash, override_prompt)
 - `state.py` - StateManager with asyncio.Lock
 - `config.py` - loads .env + env vars, verbosity int (0-3), use_codex bool
 - `display.py` - TUI with sliding window task panel, verbosity-gated events

@@ -19,14 +19,20 @@ ship                 # reads SPEC.md or specs/*.md
 ship spec.txt        # specify design file
 ship specs/          # ship from specs directory
 ship "add auth"      # inline goal text
-ship -c              # continue interrupted run
+ship -f              # wipe state and start fresh
 ship -k              # validate spec only (exit 0/1)
-ship -w 8            # 8 workers (default: 4)
+ship -n 8            # 8 workers (default: 4)
 ship -t 1200         # 20min timeout per task (default: 2400s)
 ship -m 25           # 25 agentic turns per task (default: 50)
+ship -p "use stdlib only"  # inject override into all LLM calls
 ship -v              # verbose (show prompts/responses)
 ship -x              # enable codex refiner
 ```
+
+continuation is automatic: if state exists and spec is unchanged,
+ship resumes from where it left off. if spec changed, an LLM call
+decides whether to keep completed tasks or replan from scratch.
+use `-f` to force a fresh run.
 
 `-x` enables the codex refiner. without it, ship runs workers +
 replan only. with `-x`, codex critiques completed work and generates
@@ -54,6 +60,9 @@ specs/*.md -> validator -> planner -> workers -> judge -> verifier -> done
    catches missed work
 7. **verifier** runs adversarial challenges (up to 3 rounds) to
    prove the objective is met before marking complete
+
+on spec change (hash differs from saved state): LLM decides whether
+to keep completed tasks and add new ones, or replan from scratch.
 
 on error: worker resumes session for a progress summary, or falls
 back to last `<progress>` tags seen. if output is missing XML tags,

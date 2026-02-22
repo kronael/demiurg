@@ -77,13 +77,14 @@ execution flow:
 1. check task.worker field - skip if pinned to different worker
 2. mark task as running, notify judge
 3. spawn `claude -p <task.description> --model sonnet --permission-mode bypassPermissions` in current directory
-4. prompt instructs worker to read PLAN.md and CLAUDE.md before starting
-5. claude code has full tool access (read/write files, bash, grep, etc)
-6. stream stdout line-by-line; on_progress callback fires on `<progress>` XML tags
-7. parse output for `<status>`, `<summary>`, `<followups>` XML tags
-8. if XML tags missing, call claude.reformat(session_id) to retry formatting
-9. mark task as completed with result and summary
-10. notify judge; append git diff stats to LOG.md entry
+4. if override_prompt set (-p flag), appended to system prompt for this call
+5. prompt instructs worker to read PLAN.md and CLAUDE.md before starting
+6. claude code has full tool access (read/write files, bash, grep, etc)
+7. stream stdout line-by-line; on_progress callback fires on `<progress>` XML tags
+8. parse output for `<status>`, `<summary>`, `<followups>` XML tags
+9. if XML tags missing, call claude.reformat(session_id) to retry formatting
+10. mark task as completed with result and summary
+11. notify judge; append git diff stats to LOG.md entry
 
 on error (ClaudeError):
 - if session_id available: resume session via claude.summarize() for progress summary
@@ -203,31 +204,34 @@ non-tty: one line per state change.
 
 ## data flow
 
-1. main() parses args (design file, inline text, or -c/-k flags)
+1. main() parses args (design file, inline text, or flags)
 2. load config (CLI args > env vars > .env > defaults)
 3. acquire ship.lock (exclusive, non-blocking) — bail if already running
 4. set display.verbosity
-5. if new run (not -c):
-   - if stale/rejected state with no real work: wipe silently
-   - if real previous state: prompt [c/N/q] (TTY) or wipe (non-TTY)
+5. resolve continuation vs fresh run:
+   - `-f`: wipe state unconditionally, start fresh
+   - no state: fresh run
+   - state exists, spec unchanged, incomplete: auto-resume (silent)
+   - state exists, spec unchanged, complete: print "done, use -f to restart", exit 0
+   - state exists, spec changed: LLM re-evaluation — keep completed tasks (add on top) or replan from scratch
+6. fresh run:
    - check .ship/validated cache; skip validator if spec SHA256 matches
    - if not cached: validator.validate() checks spec
    - if -k: exit 0 (accepted) or 1 (rejected) after validation
    - planner.plan_once() generates tasks + mode + worker assignments
-   - state.init_work() creates work state
-6. if continuation (-c):
-   - state.reset_interrupted_tasks() resets running → pending
-7. check execution mode, cap workers to 1 if sequential (unless -w overrides)
-8. populate queue from pending tasks
-9. spawn workers + judge as async tasks
-10. main waits for judge to complete
-11. judge polls every 5s:
+   - state.init_work() creates work state (includes spec_hash, override_prompt)
+7. on resume: state.reset_interrupted_tasks() resets running → pending
+8. check execution mode, cap workers to 1 if sequential (unless -n overrides)
+9. populate queue from pending tasks
+10. spawn workers + judge as async tasks
+11. main waits for judge to complete
+12. judge polls every 5s:
     - drain completed queue, judge each task
     - retry failed tasks; cascade after 10 retries
     - update TUI sliding window
     - when all complete: refiner (if -x) → replanner → adversarial → done
-12. on judge exit: cancel workers, print failed task summary, shutdown
-13. final done/failed counts use post-run task list (includes replanned
+13. on judge exit: cancel workers, print failed task summary, shutdown
+14. final done/failed counts use post-run task list (includes replanned
     tasks added during execution — total grows as new tasks are queued)
 
 ## task lifecycle
@@ -267,15 +271,19 @@ no coordination between workers - eliminates cursor's lock bottleneck.
 
 ## continuation model
 
-state tracks interrupted work:
-- work.json stores design_file, goal_text, execution_mode
-- running tasks reset to pending on startup
-- queue regenerated from pending tasks
+implicit continuation — no flags required:
+- no state → fresh run
+- state + same spec + incomplete → auto-resumes silently
+- state + same spec + complete → prints "done, use -f to restart", exits 0
+- state + spec changed → LLM re-evaluation: keep completed tasks or replan
+- `-f` → always wipes state
+
+work.json stores design_file, goal_text, execution_mode, spec_hash, override_prompt.
+spec_hash is compared on startup to detect changes.
+override_prompt persists across sessions so `-p` text carries forward.
 
 single .md spec file gets a slug-based data dir: `ship foo.md` → `.ship/foo/`.
 this allows multiple specs to coexist without clobbering each other.
-
-continuation: `ship SPEC.md` (creates state), `^C` (interrupt), `ship -c` (resumes from pending tasks).
 
 ## persistence format
 
@@ -283,7 +291,7 @@ tasks.json: array of task objects with id, description, files, status, worker,
 created_at, started_at, completed_at, retries, error, result, summary.
 
 work.json: design_file, goal_text, project_context, execution_mode,
-is_complete, started_at, last_updated_at.
+is_complete, spec_hash, override_prompt, started_at, last_updated_at.
 
 ## configuration precedence
 
