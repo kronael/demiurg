@@ -46,6 +46,7 @@ class Validator:
             context_section=context_section,
         )
 
+        parsed = None
         for attempt in range(1 + max_retries):
             if self.verbosity >= 3:
                 sep = "=" * 60
@@ -58,15 +59,14 @@ class Validator:
                 print(f"\n{sep}\nVALIDATOR RESPONSE:\n{sep}\n{result}\n{sep}\n")
 
             parsed = self._parse(result)
-            # retry if rejected without gaps (LLM failed to explain)
-            if not parsed.accept and not parsed.gaps:
-                if attempt < max_retries:
-                    if self.verbosity >= 1:
-                        print("warning: validator rejected without gaps, retrying...")
-                    continue
-            return parsed
+            if parsed.accept or parsed.gaps:
+                return parsed
+            # rejected without gaps — retry if attempts remain
+            if attempt < max_retries and self.verbosity >= 1:
+                print("warning: validator rejected without gaps, retrying...")
 
-        # exhausted retries, return last result with fallback gap
+        # exhausted retries, add synthetic gap
+        parsed.gaps.append("rejected without explanation (LLM parse failure)")
         return parsed
 
     def _parse(self, text: str) -> ValidationResult:
@@ -91,7 +91,4 @@ class Validator:
                     line = line.strip().strip("-*\u2022 ")
                     if line:
                         gaps.append(line)
-            if not gaps:
-                gaps.append("rejected without explanation (LLM parse failure)")
-
         return ValidationResult(accept=accept, gaps=gaps, project_md=project_md)
