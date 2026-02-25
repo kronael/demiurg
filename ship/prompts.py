@@ -39,8 +39,9 @@ Return ONLY this XML:
 - If accepted, generate a concise PROJECT.md that clarifies the goal,
   stack, IO surfaces, constraints, and success criteria. Use markdown.
 - If rejected, output empty `<project></project>`.
-- If rejected, each `<gap>` must contain a specific, actionable
-  description of what is missing. Never leave gaps empty on rejection.
+- If rejected, you MUST output at least one `<gap>` with a specific,
+  actionable description of what is missing. A rejection without gaps is
+  invalid — the caller cannot fix what you don't explain.
 - Be concise and specific in each gap.
 """.strip()
 
