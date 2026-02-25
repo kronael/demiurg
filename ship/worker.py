@@ -69,31 +69,28 @@ class Worker:
         progress_log: list[str] = []
 
         try:
-            override_section = (
-                f"Override instructions: {self.override_prompt}\n\n"
-                if self.override_prompt
-                else ""
-            )
-            context = (
-                f"Project: {self.project_context}\n\n" if self.project_context else ""
-            )
-            project_path = str(Path(self.cfg.data_dir) / "PROJECT.md")
-            spec_content = self._read_spec()
-            prompt = override_section + WORKER.format(
-                context=context,
+            data = Path(self.cfg.data_dir)
+            prompt = WORKER.format(
+                context=(
+                    f"Project: {self.project_context}\n\n"
+                    if self.project_context
+                    else ""
+                ),
                 timeout_min=self.cfg.task_timeout // 60,
                 description=task.description,
-                plan_path=str(Path(self.cfg.data_dir) / "PLAN.md"),
-                project_path=project_path,
-                spec_content=spec_content,
-                log_path=str(Path(self.cfg.data_dir) / "LOG.md"),
+                plan_path=str(data / "PLAN.md"),
+                project_path=str(data / "PROJECT.md"),
+                spec_content=self._read_spec(),
+                log_path=str(data / "LOG.md"),
             )
+            if self.override_prompt:
+                prompt = f"Override instructions: {self.override_prompt}\n\n{prompt}"
             if self.cfg.verbosity >= 3:
-                display.event(f"\n{'=' * 60}", min_level=3)
-                display.event("PROMPT TO CLAUDE:", min_level=3)
-                display.event(f"{'=' * 60}", min_level=3)
-                display.event(prompt, min_level=3)
-                display.event(f"{'=' * 60}\n", min_level=3)
+                sep = "=" * 60
+                display.event(
+                    f"\n{sep}\nPROMPT TO CLAUDE:\n{sep}\n{prompt}\n{sep}\n",
+                    min_level=3,
+                )
 
             head_before = await self._git_head()
 
@@ -152,14 +149,12 @@ class Worker:
                 self.judge.notify_completed(updated)
             git_summary = await self._git_diff_stat(head_before)
             suffix = f" ({git_summary})" if git_summary else ""
-            label = summary if summary else task.description[:60]
+            label = summary or task.description[:60]
             log_entry(f"done: {label}{suffix}")
-            done_msg = (
-                f"  [{self.worker_id}] done: {summary}{suffix}"
-                if summary
-                else f"  [{self.worker_id}] done{suffix}"
+            display.event(
+                f"  [{self.worker_id}] done: {label}{suffix}",
+                min_level=2,
             )
-            display.event(done_msg, min_level=2)
             logging.info(f"{self.worker_id} completed: {task.description}")
 
         except ClaudeError as e:

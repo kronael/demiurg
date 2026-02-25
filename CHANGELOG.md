@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.7 (2026-02-25)
+
+### Changed
+- prompts.py: full rewrite of all 7 LLM prompts from dense backslash-continued
+  text to clean markdown with ## headers and bullet lists
+- PLANNER prompt now produces feature-level work packages instead of micro-tasks
+- WORKER prompt receives spec content inline (embedded at dispatch time) and
+  has task description moved to end of prompt
+- worker.py: added spec_files param and `_read_spec()` method that reads spec
+  files and embeds content in worker prompt; replaced spec_files format
+  placeholder with spec_content
+- __main__.py: computes spec_label_for_workers and passes to Worker constructor
+- validator.py: fallback extracts text between decision/project tags when
+  rejection has empty gaps
+
 ## 0.6.1 (2026-02-19)
 
 ### Added

@@ -76,11 +76,12 @@ config precedence: CLI args > env vars > .env file > defaults.
 - refiner only runs when -x flag is set (use_codex: bool in config)
 - workers told actual timeout from config
 - failed tasks auto-retry up to 10 times (timeout is just cleanup)
-- planner told "2 day tasks" to get smaller chunks
+- planner produces feature-level work packages (not micro-tasks); told "2 day tasks"
 - planner can set execution mode (parallel/sequential) and pin tasks to workers
 - sequential mode: -n flag overrides the auto-reduction to 1 worker
 - subprocess cleanup: SIGTERM, wait 10s, then SIGKILL
 - TUI sliding window: shows running tasks + next N pending (not all tasks)
+- workers receive spec content inline in prompt (read at dispatch time, not by agent)
 - workers read PLAN.md and CLAUDE.md before executing their task
 - execute() streams stdout line-by-line; on_progress fires on `<progress>` tags
 - `_parse_output` returns a 3-tuple `(status, followups, summary)` — not a dataclass yet
@@ -102,14 +103,14 @@ project root (LLM-visible): SPEC.md, PLAN.md, PROGRESS.md, LOG.md, PROJECT.md
 - `config.py` - loads .env + env vars, verbosity int (0-3), use_codex bool
 - `display.py` - TUI with sliding window task panel, verbosity-gated events
 - `planner.py` - design -> tasks + mode + worker assignments via claude CLI
-- `validator.py` - rejects bad designs, writes PROJECT.md
-- `worker.py` - executes tasks via ClaudeCodeClient, appends git diff to LOG.md
+- `validator.py` - rejects bad designs, writes PROJECT.md; fallback tag extraction for empty gaps
+- `worker.py` - executes tasks via ClaudeCodeClient, embeds spec content in prompt, appends git diff to LOG.md
 - `claude_code.py` - claude CLI wrapper, streams stdout, fires on_progress callbacks
 - `codex_cli.py` - codex CLI wrapper (used by refiner)
 - `judge.py` - polling orchestrator, triggers refiner/replanner/adversarial
 - `refiner.py` - quick batch critique via codex CLI
 - `replanner.py` - deep goal assessment via claude CLI
-- `prompts.py` - all LLM prompts in one place
+- `prompts.py` - all 7 LLM prompts (markdown with ## headers, bullet lists)
 
 ## commit messages
 

@@ -46,20 +46,14 @@ class Validator:
         )
 
         if self.verbosity >= 3:
-            print(f"\n{'=' * 60}")
-            print("VALIDATOR PROMPT:")
-            print(f"{'=' * 60}")
-            print(prompt)
-            print(f"{'=' * 60}\n")
+            sep = "=" * 60
+            print(f"\n{sep}\nVALIDATOR PROMPT:\n{sep}\n{prompt}\n{sep}\n")
 
         result, _ = await self.claude.execute(prompt, timeout=180)
 
         if self.verbosity >= 3:
-            print(f"\n{'=' * 60}")
-            print("VALIDATOR RESPONSE:")
-            print(f"{'=' * 60}")
-            print(result)
-            print(f"{'=' * 60}\n")
+            sep = "=" * 60
+            print(f"\n{sep}\nVALIDATOR RESPONSE:\n{sep}\n{result}\n{sep}\n")
 
         return self._parse(result)
 

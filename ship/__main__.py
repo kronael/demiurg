@@ -182,7 +182,7 @@ async def _reeval_spec_change(
         pass
 
     done = sum(1 for t in old_tasks if t.status is TaskStatus.COMPLETED)
-    pending = sum(1 for t in old_tasks if t.status not in (TaskStatus.COMPLETED,))
+    pending = len(old_tasks) - done
     task_summary = "\n".join(
         f"- [{t.status.value}] {t.description[:80]}" for t in old_tasks
     )
@@ -515,12 +515,11 @@ async def _main(
         use_codex=cfg.use_codex,
         progress_path=str(Path(cfg.data_dir) / "PROGRESS.md"),
     )
-    # resolve spec_files label for worker context
-    if _auto_cont:
-        spec_label_for_workers = work.design_file if work else ""
-    else:
-        spec_label_for_workers = spec_label if spec_files else ""
-
+    spec_label_for_workers = (
+        (work.design_file if work else "")
+        if _auto_cont
+        else (spec_label if spec_files else "")
+    )
     worker_list = [
         Worker(
             f"w{i}",
