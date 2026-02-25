@@ -76,11 +76,11 @@ fetches tasks from queue, executes them, updates state.
 execution flow:
 1. check task.worker field - skip if pinned to different worker
 2. mark task as running, notify judge
-3. spawn `claude -p <task.description> --model sonnet --permission-mode bypassPermissions` in current directory
+3. spawn `claude -p <task.description> --model sonnet --permission-mode bypassPermissions --output-format stream-json --verbose` in current directory
 4. if override_prompt set (-p flag), appended to system prompt for this call
 5. prompt instructs worker to read PLAN.md and CLAUDE.md before starting
 6. claude code has full tool access (read/write files, bash, grep, etc)
-7. stream stdout line-by-line; on_progress callback fires on `<progress>` XML tags
+7. stream NDJSON events from stdout (16MB buffer); on_progress callback fires on `<progress>` XML tags extracted from assistant message events
 8. parse output for `<status>`, `<summary>`, `<followups>` XML tags
 9. if XML tags missing, call claude.reformat(session_id) to retry formatting
 10. mark task as completed with result and summary

@@ -49,8 +49,9 @@ specs/*.md -> validator -> planner -> workers -> judge -> verifier -> done
    subsequent runs skip re-validation if spec unchanged.
 2. **planner** breaks deliverables into tasks, writes PLAN.md
 3. **workers** execute tasks via claude CLI, each in its own session.
-   streams stdout, parses `<progress>` tags for live status, tracks
-   git diff stats per task. parses `<summary>` from output for TUI.
+   streams NDJSON events via `--output-format stream-json`, parses
+   `<progress>` tags for live status, tracks git diff stats per task.
+   parses `<summary>` from output for TUI.
 4. **judge** monitors completion, judges each task, triggers
    refinement cycles. retries failed tasks up to 10 times, then
    cascades failure to dependent tasks.
