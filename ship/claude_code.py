@@ -91,7 +91,7 @@ class ClaudeCodeClient:
             "--permission-mode",
             self.permission_mode,
             "--output-format",
-            "json",
+            "stream-json",
         ]
         if self.max_turns is not None:
             args.extend(["--max-turns", str(self.max_turns)])
@@ -107,22 +107,36 @@ class ClaudeCodeClient:
         )
         self._proc = proc
 
-        lines: list[str] = []
+        result_text = ""
         session_id = ""
+        subtype = ""
         try:
             async with asyncio.timeout(timeout):
                 assert proc.stdout is not None
                 assert proc.stderr is not None
                 async for raw in proc.stdout:
-                    line = raw.decode()
-                    lines.append(line)
-                    if on_progress:
-                        m = re.search(
-                            r"<progress>(.*?)</progress>",
-                            line,
-                        )
-                        if m:
-                            on_progress(m.group(1).strip())
+                    line = raw.decode().strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    etype = event.get("type", "")
+                    if etype == "assistant" and on_progress:
+                        msg = event.get("message", {})
+                        for block in msg.get("content", []):
+                            if block.get("type") == "text":
+                                text = block.get("text", "")
+                                for m in re.finditer(
+                                    r"<progress>(.*?)</progress>",
+                                    text,
+                                ):
+                                    on_progress(m.group(1).strip())
+                    elif etype == "result":
+                        result_text = event.get("result", "")
+                        session_id = event.get("session_id", "")
+                        subtype = event.get("subtype", "")
                 stderr_bytes = await proc.stderr.read()
                 await proc.wait()
         except asyncio.CancelledError:
@@ -130,26 +144,16 @@ class ClaudeCodeClient:
             raise
         except TimeoutError:
             await self._kill_proc(proc)
-            partial = "".join(lines).strip()
-            self._trace(len(prompt), len(partial), timeout, False)
+            self._trace(len(prompt), len(result_text), timeout, False)
             raise ClaudeError(
                 f"claude CLI timeout after {timeout}s",
-                partial=partial,
+                partial=result_text,
                 session_id=session_id,
             )
         finally:
             self._proc = None
 
-        raw_output = "".join(lines).strip()
-        output = raw_output
-        subtype = ""
-        try:
-            data = json.loads(raw_output)
-            output = data.get("result", raw_output)
-            session_id = data.get("session_id", "")
-            subtype = data.get("subtype", "")
-        except json.JSONDecodeError:
-            pass
+        output = result_text
 
         if proc.returncode != 0:
             stderr_text = stderr_bytes.decode().strip()
