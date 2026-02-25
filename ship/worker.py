@@ -78,13 +78,14 @@ class Worker:
                 f"Project: {self.project_context}\n\n" if self.project_context else ""
             )
             project_path = str(Path(self.cfg.data_dir) / "PROJECT.md")
+            spec_content = self._read_spec()
             prompt = override_section + WORKER.format(
                 context=context,
                 timeout_min=self.cfg.task_timeout // 60,
                 description=task.description,
                 plan_path=str(Path(self.cfg.data_dir) / "PLAN.md"),
                 project_path=project_path,
-                spec_files=self.spec_files or "SPEC.md",
+                spec_content=spec_content,
                 log_path=str(Path(self.cfg.data_dir) / "LOG.md"),
             )
             if self.cfg.verbosity >= 3:
@@ -206,6 +207,19 @@ class Worker:
         finally:
             if self.judge:
                 self.judge.clear_worker_task(self.worker_id)
+
+    def _read_spec(self) -> str:
+        """read spec files into a string for the worker prompt"""
+        if not self.spec_files:
+            return "(no spec provided)"
+        parts = []
+        for name in self.spec_files.split(", "):
+            p = Path(name)
+            try:
+                parts.append(p.read_text().strip())
+            except OSError:
+                parts.append(f"(could not read {name})")
+        return "\n\n".join(parts)
 
     def _parse_output(self, text: str) -> tuple[str, list[str], str]:
         m = re.search(r"<status>(done|partial)</status>", text)

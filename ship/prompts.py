@@ -146,19 +146,18 @@ WORKER = """
 
 {context}
 
-## Before Starting
+## Spec
 
-Read these files if they exist — they contain architecture and conventions
-that will save you from re-exploring the codebase:
+{spec_content}
 
-- `{spec_files}` (original spec)
+## Reference Files
+
+Read these if they exist — architecture and conventions that save you
+from re-exploring the codebase:
+
 - `{project_path}` (project summary)
 - `{plan_path}` (execution plan)
 - `CLAUDE.md` (project patterns)
-
-## Your Task
-
-{description}
 
 ## How to Work
 
@@ -167,8 +166,6 @@ be retried automatically. Focus on making progress.
 
 Break this work package into subtasks using the TodoWrite tool (Claude's
 built-in task list), then work through them systematically.
-
-When done, run `/refine` to clean up and update docs.
 
 ## Progress Reporting
 
@@ -211,6 +208,10 @@ If you could NOT fully complete the task:
 <task>description of remaining work</task>
 </followups>
 ```
+
+## Your Task
+
+{description}
 """.strip()
 
 JUDGE_TASK = """
