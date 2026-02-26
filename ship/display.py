@@ -7,12 +7,15 @@ from datetime import datetime
 from ship.types_ import TaskStatus
 
 
-def _truncate(text: str, max_words: int = 8) -> str:
-    """first N words, truncated with ellipsis if needed"""
+def _truncate(text: str, max_words: int = 8, max_chars: int = 50) -> str:
+    """first N words, capped at max_chars"""
     words = text.split()
-    if len(words) <= max_words:
-        return text
-    return " ".join(words[:max_words]) + "\u2026"
+    out = " ".join(words[:max_words])
+    if len(words) > max_words:
+        out += "\u2026"
+    if len(out) > max_chars:
+        out = out[: max_chars - 1] + "\u2026"
+    return out
 
 
 _STATUS_ICON = {
@@ -96,7 +99,7 @@ class Display:
         self,
         tasks: list[tuple[str, TaskStatus, str, str, str]] | None = None,
     ) -> None:
-        """print the full task list once (no cursor tricks)"""
+        """build task summaries; tty defers rendering to refresh()"""
         render = tasks if tasks is not None else self._tasks
         if self.verbosity < 1 or not render:
             return
@@ -106,20 +109,17 @@ class Display:
         self._task_summaries = [_truncate(desc) for desc, *_ in render]
         self._task_desc_to_idx = {desc: i for i, (desc, *_) in enumerate(render)}
 
-        cols = self._cols()
-        w = len(str(len(render)))
-        print()
-        for i, (desc, status, *_rest) in enumerate(render):
-            icon_c, _ = _STATUS_ICON.get(status, ("\u00b7", "\u00b7"))
-            summary = self._task_summaries[i]
-            pre = f"  [{i + 1:>{w}}] {icon_c} "
-            avail = cols - 2 - w - 5  # approx
-            if len(summary) > avail > 0:
-                summary = summary[: avail - 1] + "\u2026"
-            print(f"{pre}{summary}")
-        print()
-
         self._prev_statuses = {desc: status for desc, status, *_ in render}
+
+        # non-tty: print static list (refresh is skipped)
+        if not self.is_tty:
+            w = len(str(len(render)))
+            print()
+            for i, (desc, status, *_rest) in enumerate(render):
+                icon_c, _ = _STATUS_ICON.get(status, ("\u00b7", "\u00b7"))
+                summary = self._task_summaries[i]
+                print(f"  [{i + 1:>{w}}] {icon_c} {summary}")
+            print()
 
     def refresh(self) -> None:
         """redraw task list + worker panel in place"""
@@ -150,6 +150,9 @@ class Display:
         lines: list[str] = []
         cols = self._cols()
 
+        # leading blank line to separate from events
+        lines.append("")
+
         # task section from full task list
         n = len(self._tasks)
         w = len(str(n))
@@ -171,8 +174,7 @@ class Display:
             wid = f"w{wi}"
             if wid in self._worker_progress:
                 tidx, tsummary, msg = self._worker_progress[wid]
-                # truncate progress msg
-                tag = f"[{tidx}] {tsummary}"
+                tag = f"[{tidx}] {tsummary}" if tidx > 0 else tsummary
                 pmsg = msg[:40] if len(msg) > 40 else msg
                 avail = cols - 6 - len(tag) - 3
                 if len(pmsg) > avail > 0:
