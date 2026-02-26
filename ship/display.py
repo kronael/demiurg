@@ -41,7 +41,6 @@ class Display:
         self._tasks: list[tuple[str, TaskStatus, str, str, str]] = []
         self._phase = "executing"
         self._panel_lines = 0
-        self._prev_statuses: dict[str, TaskStatus] = {}
         self._plan_shown = False
         self._global_done: int = 0
         self._global_total: int = 0
@@ -111,8 +110,6 @@ class Display:
         self._task_summaries = [_truncate(desc) for desc, *_ in render]
         self._task_desc_to_idx = {desc: i for i, (desc, *_) in enumerate(render)}
 
-        self._prev_statuses = {desc: status for desc, status, *_ in render}
-
         # non-tty: print static list (refresh is skipped)
         if not self.is_tty:
             w = len(str(len(render)))
@@ -131,12 +128,7 @@ class Display:
         if not self.is_tty:
             return
 
-        # erase old panel completely
-        if self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            for _ in range(self._panel_lines):
-                sys.stdout.write("\033[K\n")
-            sys.stdout.write(f"\033[{self._panel_lines}A")
+        self._erase_panel()
 
         # flush buffered events above panel
         for ev in self._pending_events:
@@ -182,15 +174,12 @@ class Display:
 
         # summary line
         if self._global_total > 0:
-            g_done = self._global_done
-            g_total = self._global_total
-            pct = g_done * 100 // g_total
-            parts = [f"{g_done}/{g_total} ({pct}%)"]
+            done, total = self._global_done, self._global_total
         else:
             total = len(self._tasks)
             done = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.COMPLETED)
-            pct = done * 100 // total if total else 0
-            parts = [f"{done}/{total} ({pct}%)"]
+        pct = done * 100 // total if total else 0
+        parts = [f"{done}/{total} ({pct}%)"]
         fail = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.FAILED)
         run = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.RUNNING)
         if run:
@@ -218,35 +207,27 @@ class Display:
         """always print, even in quiet mode"""
         print(msg, file=sys.stderr)
 
+    def _erase_panel(self) -> None:
+        if not self.is_tty or self._panel_lines <= 0:
+            return
+        sys.stdout.write(f"\033[{self._panel_lines}A")
+        for _ in range(self._panel_lines):
+            sys.stdout.write("\033[K\n")
+        sys.stdout.write(f"\033[{self._panel_lines}A")
+
     def clear_status(self) -> None:
         """clear the panel"""
-        if self.is_tty and self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            for _ in range(self._panel_lines):
-                sys.stdout.write("\033[K\n")
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            sys.stdout.flush()
+        self._erase_panel()
+        sys.stdout.flush()
         self._panel_lines = 0
 
     def finish(self) -> None:
         """clear panel, flush remaining events"""
-        # flush any pending events before clearing
-        if self._pending_events:
-            if self.is_tty and self._panel_lines > 0:
-                sys.stdout.write(f"\033[{self._panel_lines}A")
-                for _ in range(self._panel_lines):
-                    sys.stdout.write("\033[K\n")
-                sys.stdout.write(f"\033[{self._panel_lines}A")
-            for ev in self._pending_events:
-                sys.stdout.write(f"{ev}\n")
-            self._pending_events.clear()
-            sys.stdout.flush()
-        elif self.is_tty and self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            for _ in range(self._panel_lines):
-                sys.stdout.write("\033[K\n")
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            sys.stdout.flush()
+        self._erase_panel()
+        for ev in self._pending_events:
+            sys.stdout.write(f"{ev}\n")
+        self._pending_events.clear()
+        sys.stdout.flush()
         self._panel_lines = 0
         self._tasks = []
         self._worker_progress.clear()

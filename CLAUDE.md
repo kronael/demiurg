@@ -83,7 +83,7 @@ config precedence: CLI args > env vars > .env file > defaults.
 - planner can set execution mode (parallel/sequential) and pin tasks to workers
 - sequential mode: -n flag overrides the auto-reduction to 1 worker
 - subprocess cleanup: SIGTERM, wait 10s, then SIGKILL
-- TUI sliding window: shows running tasks + next N pending (not all tasks)
+- TUI shows full task overview (status icons ✓/✗/⟳/·) + per-worker activity lines + summary; events buffered between refreshes
 - workers receive spec content inline in prompt (read at dispatch time, not by agent)
 - workers read PLAN.md and CLAUDE.md before executing their task
 - execute() uses `--output-format stream-json` for real-time NDJSON progress events; 16MB stdout buffer
@@ -104,7 +104,7 @@ project root (LLM-visible): SPEC.md, PLAN.md, PROGRESS.md, LOG.md, PROJECT.md
 - `types_.py` - Task (with worker field), TaskStatus, WorkState (with execution_mode, spec_hash, override_prompt)
 - `state.py` - StateManager with asyncio.Lock
 - `config.py` - loads .env + env vars, verbosity int (0-3), use_codex bool
-- `display.py` - TUI with sliding window task panel, verbosity-gated events
+- `display.py` - TUI with task overview panel, worker progress lines, buffered events
 - `planner.py` - design -> tasks + mode + worker assignments via claude CLI
 - `validator.py` - rejects bad designs, writes PROJECT.md; fallback tag extraction for empty gaps
 - `worker.py` - executes tasks via ClaudeCodeClient, embeds spec content in prompt, appends git diff to LOG.md

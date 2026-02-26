@@ -107,11 +107,15 @@ class Judge:
             return (t.description, t.status, worker, t.summary, t.error)
 
         all_panel = [_entry(t) for t in tasks]
-
         display.set_tasks(all_panel)
-        completed_count = sum(1 for t in tasks if t.status is TaskStatus.COMPLETED)
-        display.set_global(completed_count, len(tasks))
 
+        total = len(tasks)
+        completed = sum(1 for t in tasks if t.status is TaskStatus.COMPLETED)
+        running = sum(1 for t in tasks if t.status is TaskStatus.RUNNING)
+        pending = sum(1 for t in tasks if t.status is TaskStatus.PENDING)
+        failed = sum(1 for t in tasks if t.status is TaskStatus.FAILED)
+
+        display.set_global(completed, total)
         if self.refine_count > 0:
             phase = f"refining ({self.refine_count}/{self.max_refine_rounds})"
         elif self.replan_count > 0:
@@ -124,11 +128,6 @@ class Judge:
             display.show_plan(all_panel)
         display.refresh()
 
-        total = len(tasks)
-        completed = sum(1 for t in tasks if t.status is TaskStatus.COMPLETED)
-        running = sum(1 for t in tasks if t.status is TaskStatus.RUNNING)
-        pending = sum(1 for t in tasks if t.status is TaskStatus.PENDING)
-        failed = sum(1 for t in tasks if t.status is TaskStatus.FAILED)
         write_progress_md(
             total,
             completed,
