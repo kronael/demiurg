@@ -90,6 +90,7 @@ config precedence: CLI args > env vars > .env file > defaults.
 - `_parse_output` returns a 3-tuple `(status, followups, summary)` — not a dataclass yet
 - git diff stats (_git_head + _git_diff_stat) appended to LOG.md after each task
 - adversarial verifier: 10 challenges/round, picks 2 random, queues as tasks; deduped across rounds
+- validator catches ClaudeError (including timeouts) and retries; same retry semantics as refiner/replanner/verifier
 - refiner/replanner/verifier timeouts are inconclusive (retry), not treated as success; attempt counters only increment on successful calls
 - final done/total count uses post-run task list — total grows as replanned tasks are added during execution
 
@@ -106,7 +107,7 @@ project root (LLM-visible): SPEC.md, PLAN.md, PROGRESS.md, LOG.md, PROJECT.md
 - `config.py` - loads .env + env vars, verbosity int (0-3), use_codex bool
 - `display.py` - TUI with task overview panel, worker progress lines, buffered events
 - `planner.py` - design -> tasks + mode + worker assignments via claude CLI
-- `validator.py` - rejects bad designs, writes PROJECT.md; fallback tag extraction for empty gaps
+- `validator.py` - rejects bad designs, writes PROJECT.md; fallback tag extraction for empty gaps; retries on ClaudeError/timeout
 - `worker.py` - executes tasks via ClaudeCodeClient, embeds spec content in prompt, appends git diff to LOG.md
 - `claude_code.py` - claude CLI wrapper, NDJSON stream-json output, on_progress callbacks
 - `codex_cli.py` - codex CLI wrapper (used by refiner)

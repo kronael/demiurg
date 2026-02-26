@@ -53,10 +53,7 @@ class Validator:
                 print(f"\n{sep}\nVALIDATOR PROMPT:\n{sep}\n{prompt}\n{sep}\n")
 
             try:
-                result, _ = await self.claude.execute(
-                    prompt,
-                    timeout=180,
-                )
+                result, _ = await self.claude.execute(prompt, timeout=180)
             except ClaudeError as e:
                 if attempt < max_retries:
                     if self.verbosity >= 1:
@@ -71,19 +68,19 @@ class Validator:
             parsed = self._parse(result)
             if parsed.accept or parsed.gaps:
                 return parsed
-            # rejected without gaps — retry if attempts remain
             if attempt < max_retries and self.verbosity >= 1:
                 print("warning: validator rejected without gaps, retrying...")
 
-        if parsed is None:
-            return ValidationResult(
-                accept=False,
-                gaps=["validator failed after retries"],
-                project_md="",
-            )
-        # exhausted retries, add synthetic gap
-        parsed.gaps.append("rejected without explanation (LLM parse failure)")
-        return parsed
+        # all attempts returned parseable but gapless rejections
+        if parsed is not None:
+            parsed.gaps.append("rejected without explanation (LLM parse failure)")
+            return parsed
+        # all attempts raised ClaudeError (last re-raises, so unreachable)
+        return ValidationResult(
+            accept=False,
+            gaps=["validator failed after retries"],
+            project_md="",
+        )
 
     def _parse(self, text: str) -> ValidationResult:
         decision_match = re.search(r"<decision>(.*?)</decision>", text, re.DOTALL)

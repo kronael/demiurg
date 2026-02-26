@@ -92,7 +92,7 @@ class Display:
     def task_info(self, desc: str) -> tuple[int, str]:
         """return (1-based index, 8-word summary) for a task desc"""
         idx = self._task_desc_to_idx.get(desc, -1)
-        if idx >= 0 and idx < len(self._task_summaries):
+        if 0 <= idx < len(self._task_summaries):
             return idx + 1, self._task_summaries[idx]
         return 0, _truncate(desc)
 
@@ -164,7 +164,7 @@ class Display:
             if wid in self._worker_progress:
                 tidx, tsummary, msg = self._worker_progress[wid]
                 tag = f"[{tidx}] {tsummary}" if tidx > 0 else tsummary
-                pmsg = msg[:40] if len(msg) > 40 else msg
+                pmsg = msg[:40]
                 avail = cols - 6 - len(tag) - 3
                 if len(pmsg) > avail > 0:
                     pmsg = pmsg[: avail - 1] + "\u2026"
@@ -179,9 +179,13 @@ class Display:
             total = len(self._tasks)
             done = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.COMPLETED)
         pct = done * 100 // total if total else 0
+        run = fail = 0
+        for _, s, *_ in self._tasks:
+            if s is TaskStatus.RUNNING:
+                run += 1
+            elif s is TaskStatus.FAILED:
+                fail += 1
         parts = [f"{done}/{total} ({pct}%)"]
-        fail = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.FAILED)
-        run = sum(1 for _, s, *_ in self._tasks if s is TaskStatus.RUNNING)
         if run:
             parts.append(f"{run} running")
         if fail:

@@ -494,7 +494,7 @@ async def _main(
 
     all_tasks = await state.get_all_tasks()
     total = len(all_tasks)
-    completed = len([t for t in all_tasks if t.status is TaskStatus.COMPLETED])
+    completed = sum(1 for t in all_tasks if t.status is TaskStatus.COMPLETED)
 
     work = state.get_work_state()
     project_context = work.project_context if work else ""
@@ -575,8 +575,8 @@ async def _main(
     await asyncio.gather(*worker_tasks, return_exceptions=True)
 
     final_tasks = await state.get_all_tasks()
-    completed = len([t for t in final_tasks if t.status is TaskStatus.COMPLETED])
-    failed = len([t for t in final_tasks if t.status is TaskStatus.FAILED])
+    completed = sum(1 for t in final_tasks if t.status is TaskStatus.COMPLETED)
+    failed = sum(1 for t in final_tasks if t.status is TaskStatus.FAILED)
 
     logging.info("goal satisfied")
     display.finish()

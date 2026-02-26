@@ -110,10 +110,13 @@ class Judge:
         display.set_tasks(all_panel)
 
         total = len(tasks)
-        completed = sum(1 for t in tasks if t.status is TaskStatus.COMPLETED)
-        running = sum(1 for t in tasks if t.status is TaskStatus.RUNNING)
-        pending = sum(1 for t in tasks if t.status is TaskStatus.PENDING)
-        failed = sum(1 for t in tasks if t.status is TaskStatus.FAILED)
+        counts: dict[TaskStatus, int] = {}
+        for t in tasks:
+            counts[t.status] = counts.get(t.status, 0) + 1
+        completed = counts.get(TaskStatus.COMPLETED, 0)
+        running = counts.get(TaskStatus.RUNNING, 0)
+        pending = counts.get(TaskStatus.PENDING, 0)
+        failed = counts.get(TaskStatus.FAILED, 0)
 
         display.set_global(completed, total)
         if self.refine_count > 0:
