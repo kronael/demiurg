@@ -43,6 +43,8 @@ Return ONLY this XML:
   actionable description of what is missing. A rejection without gaps is
   invalid — the caller cannot fix what you don't explain.
 - Be concise and specific in each gap.
+- List ALL gaps you find — do not stop at a few. The user fixes gaps
+  in one pass, so missing any wastes a full validation cycle.
 """.strip()
 
 PLANNER = """

@@ -94,6 +94,7 @@ def discover_spec(context: tuple[str, ...]) -> list[Path]:
 )
 @click.option("-f", "--fresh", is_flag=True, help="wipe state and start fresh")
 @click.option("-k", "--check", is_flag=True, help="validate spec only, then exit")
+@click.option("-s", "--skip-validation", is_flag=True, help="skip spec validation")
 @click.option(
     "-n", "--max-workers", "workers", type=int, help="number of parallel workers"
 )
@@ -124,6 +125,7 @@ def run(
     cont: bool,
     fresh: bool,
     check: bool,
+    skip_validation: bool,
     workers: int | None,
     workers_legacy: int | None,
     timeout: int | None,
@@ -143,6 +145,10 @@ def run(
 
     signal.signal(signal.SIGTERM, _sigterm)
 
+    if check and skip_validation:
+        click.echo("error: -k and -s are mutually exclusive", err=True)
+        sys.exit(1)
+
     verbosity = 0 if quiet else min(1 + verbose, 3)
     # -w is legacy alias for -n
     effective_workers = workers if workers is not None else workers_legacy
@@ -153,6 +159,7 @@ def run(
                 context,
                 fresh,
                 check,
+                skip_validation,
                 effective_workers,
                 timeout,
                 max_turns,
@@ -219,6 +226,7 @@ async def _main(
     context: tuple[str, ...],
     fresh: bool,
     check: bool,
+    skip_validation: bool,
     workers: int | None,
     timeout: int | None,
     max_turns: int | None,
@@ -392,7 +400,11 @@ async def _main(
         spec_h = _spec_hash(goal_text)
         already_validated = _load_validated_hash(data_dir) == spec_h
 
-        if already_validated:
+        if skip_validation:
+            _save_validated_hash(data_dir, spec_h)
+            display.event("\033[33m⏭\033[0m skipping validation (-s)")
+            validation_project_md = ""
+        elif already_validated:
             display.event("\033[32m✓\033[0m spec already validated")
             validation_project_md = ""
         else:

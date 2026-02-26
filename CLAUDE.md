@@ -23,6 +23,7 @@ ship <arg> <arg> ...    # args as context
 ship -f                 # wipe state, start fresh
 ship -k                 # validate spec only (exit 0/1)
 ship -n 8 -t 600 -m 10 # override workers/timeout/turns
+ship -s                 # skip validation, trust spec as-is
 ship -p "use stdlib"    # inject override into all LLM calls
 ship -x                 # enable refiner (codex CLI critique)
 ship -v                 # verbose (-v: details, -vv: debug)
@@ -61,6 +62,8 @@ config precedence: CLI args > env vars > .env file > defaults.
 
 ## shocking bits
 
+- `-s` skips validation entirely, trusts the spec as-is; saves validated hash so subsequent runs also skip
+- `-k` and `-s` are mutually exclusive
 - `-k` runs validation then exits: 0=accepted, 1=rejected; writes .ship/validated cache
 - continuation is implicit: no state → fresh run; same spec + incomplete → auto-resumes; same spec + complete → prints "done, use -f to restart" and exits 0
 - spec changed: LLM call decides keep-completed-tasks (add on top) or replan-from-scratch
