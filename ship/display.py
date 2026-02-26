@@ -30,6 +30,7 @@ class Display:
     """worker-centric TUI with task overview + worker panel
 
     tty: redraws panel in place using ANSI escape codes.
+    events buffer between refreshes and flush above the panel.
     non-tty: prints one line per state change.
     quiet (verbosity=0): errors only.
     """
@@ -50,7 +51,8 @@ class Display:
         # worker panel state
         self._worker_count: int = 0
         self._worker_progress: dict[str, tuple[int, str, str]] = {}
-        # task_idx, task_summary, progress_msg
+        # buffered event lines (flushed at next refresh)
+        self._pending_events: list[str] = []
 
     def banner(self, msg: str) -> None:
         """print header + separator"""
@@ -122,38 +124,33 @@ class Display:
             print()
 
     def refresh(self) -> None:
-        """redraw task list + worker panel in place"""
+        """erase old panel, flush buffered events, redraw panel"""
         if self.verbosity < 1 or not self._tasks:
             return
 
         if not self.is_tty:
             return
 
-        # emit change lines above panel
-        for desc, status, worker, summary, error in self._tasks:
-            prev = self._prev_statuses.get(desc)
-            if prev == status:
-                continue
-            self._prev_statuses[desc] = status
-            if status is TaskStatus.RUNNING:
-                tag = worker if worker else "..."
-                self._print_change(f"  [{tag}] launching: {desc}")
-            elif status is TaskStatus.COMPLETED:
-                label = summary if summary else desc
-                self._print_change(f"  done: {label}")
-            elif status is TaskStatus.FAILED:
-                err = error[:60] if error else ""
-                tail = f" \u2014 {err}" if err else ""
-                self._print_change(f"  failed: {desc[:50]}{tail}")
+        # erase old panel completely
+        if self._panel_lines > 0:
+            sys.stdout.write(f"\033[{self._panel_lines}A")
+            for _ in range(self._panel_lines):
+                sys.stdout.write("\033[K\n")
+            sys.stdout.write(f"\033[{self._panel_lines}A")
 
-        # build panel lines
+        # flush buffered events above panel
+        for ev in self._pending_events:
+            sys.stdout.write(f"{ev}\n")
+        self._pending_events.clear()
+
+        # build panel
         lines: list[str] = []
         cols = self._cols()
 
-        # leading blank line to separate from events
+        # leading blank
         lines.append("")
 
-        # task section from full task list
+        # task section
         n = len(self._tasks)
         w = len(str(n))
         for i, (desc, status, *_rest) in enumerate(self._tasks):
@@ -165,7 +162,7 @@ class Display:
             )
             lines.append(f"  [{i + 1:>{w}}] {icon_c} {summary}")
 
-        # blank line
+        # blank
         lines.append("")
 
         # worker section
@@ -202,37 +199,18 @@ class Display:
             parts.append(f"{fail} failed")
         lines.append(f"  {', '.join(parts)}  {self._phase}")
 
-        # erase old panel, draw new
-        if self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
+        # draw panel
         self._panel_lines = len(lines)
         for line in lines:
             sys.stdout.write(f"\033[K{line}\n")
         sys.stdout.flush()
 
-    def _print_change(self, msg: str) -> None:
-        """print a change line above the panel"""
-        if self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            sys.stdout.write(f"\033[K{msg}\n")
-            for _ in range(self._panel_lines):
-                sys.stdout.write("\n")
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-        else:
-            sys.stdout.write(f"{msg}\n")
-        sys.stdout.flush()
-
     def event(self, msg: str, min_level: int = 1) -> None:
-        """print a log line above the panel"""
+        """buffer event for next refresh (tty), or print immediately"""
         if self.verbosity < min_level:
             return
         if self.is_tty and self._panel_lines > 0:
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            sys.stdout.write(f"\033[K{msg}\n")
-            for _ in range(self._panel_lines):
-                sys.stdout.write("\n")
-            sys.stdout.write(f"\033[{self._panel_lines}A")
-            sys.stdout.flush()
+            self._pending_events.append(msg)
         else:
             print(msg)
 
@@ -251,8 +229,19 @@ class Display:
         self._panel_lines = 0
 
     def finish(self) -> None:
-        """clear panel"""
-        if self.is_tty and self._panel_lines > 0:
+        """clear panel, flush remaining events"""
+        # flush any pending events before clearing
+        if self._pending_events:
+            if self.is_tty and self._panel_lines > 0:
+                sys.stdout.write(f"\033[{self._panel_lines}A")
+                for _ in range(self._panel_lines):
+                    sys.stdout.write("\033[K\n")
+                sys.stdout.write(f"\033[{self._panel_lines}A")
+            for ev in self._pending_events:
+                sys.stdout.write(f"{ev}\n")
+            self._pending_events.clear()
+            sys.stdout.flush()
+        elif self.is_tty and self._panel_lines > 0:
             sys.stdout.write(f"\033[{self._panel_lines}A")
             for _ in range(self._panel_lines):
                 sys.stdout.write("\033[K\n")
