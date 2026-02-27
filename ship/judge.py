@@ -177,7 +177,7 @@ class Judge:
         )
 
         try:
-            result, _ = await verifier.execute(prompt, timeout=90)
+            result, _ = await verifier.execute(prompt, timeout=300)
         except RuntimeError as e:
             logging.warning(f"verifier timed out or errored: {e}")
             display.event(f"  verifier failed: {e}")

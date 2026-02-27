@@ -77,7 +77,7 @@ class Replanner:
             display.event("  replanner: full assessment...", min_level=2)
 
         try:
-            result, _ = await self.claude.execute(prompt, timeout=90)
+            result, _ = await self.claude.execute(prompt, timeout=300)
             if self.verbosity >= 3:
                 display.event(f"  replanner response: {len(result)} chars", min_level=3)
             new_tasks = self._parse_tasks(result)
