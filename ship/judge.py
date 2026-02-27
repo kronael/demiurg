@@ -48,6 +48,9 @@ class Judge:
         self.progress_path = progress_path
         self.refine_count = 0
         self.replan_count = 0
+        self._refine_timeouts = 0
+        self._replan_timeouts = 0
+        self._max_timeouts = 3
         self.worker_tasks: dict[str, str] = {}
         self.claude = ClaudeCodeClient(
             model="sonnet",
@@ -70,6 +73,7 @@ class Judge:
         self._adv_task_ids: set[str] = set()
         self._adv_attempts = 0
         self.max_adv_attempts = 3
+        self._adv_timeouts = 0
         self._seen_challenges: set[str] = set()
 
     def set_worker_task(self, worker_id: str, desc: str) -> None:
@@ -177,11 +181,14 @@ class Judge:
         )
 
         try:
-            result, _ = await verifier.execute(prompt, timeout=300)
+            result, _ = await verifier.execute(prompt, timeout=600)
         except RuntimeError as e:
+            self._adv_timeouts += 1
             logging.warning(f"verifier timed out or errored: {e}")
             display.event(f"  verifier failed: {e}")
-            return None  # retry next cycle, don't consume attempt
+            if self._adv_timeouts >= self._max_timeouts:
+                return True  # exhausted — caller decides
+            return None
 
         self._adv_attempts += 1
 
@@ -321,8 +328,12 @@ class Judge:
                     try:
                         new_tasks = await self.refiner.refine()
                     except RuntimeError:
-                        self.refine_count -= 1  # don't count timed-out attempt
-                        continue
+                        self._refine_timeouts += 1
+                        if self._refine_timeouts >= self._max_timeouts:
+                            display.event("  refiner: timed out, escalating")
+                        else:
+                            self.refine_count -= 1
+                            continue
                     if new_tasks:
                         log_entry(f"+{len(new_tasks)} from refiner")
                         display.event(f"  +{len(new_tasks)} follow-up tasks")
@@ -344,8 +355,12 @@ class Judge:
                     try:
                         new_tasks = await self.replanner.replan()
                     except RuntimeError:
-                        self.replan_count -= 1  # don't count timed-out attempt
-                        continue
+                        self._replan_timeouts += 1
+                        if self._replan_timeouts >= self._max_timeouts:
+                            display.event("  replanner: timed out, escalating")
+                        else:
+                            self.replan_count -= 1
+                            continue
                     if new_tasks:
                         log_entry(f"+{len(new_tasks)} from replanner")
                         display.event(f"  +{len(new_tasks)} replanned tasks")
@@ -356,11 +371,14 @@ class Judge:
 
                 gave_up = await self._run_adversarial_round()
                 if gave_up is None:
-                    continue  # timed out, retry next cycle
+                    continue
                 if gave_up:
                     display.clear_status()
-                    display.event("  all verified — no issues found")
-                    logging.info("goal satisfied (verification clean)")
+                    if self._adv_timeouts >= self._max_timeouts:
+                        display.event("  verification inconclusive (timeouts)")
+                    else:
+                        display.event("  all verified — no issues found")
+                    logging.info("goal satisfied")
                     await self.state.mark_complete()
                     return
                 continue
