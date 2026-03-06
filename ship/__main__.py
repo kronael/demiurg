@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import hashlib
+import importlib.metadata
 import json
 import logging
 import os
@@ -24,7 +25,7 @@ from ship.validator import Validator
 from ship.worker import Worker
 
 
-VERSION = "0.7.0"
+VERSION = importlib.metadata.version("ship")
 
 
 def _has_real_state(data_dir: Path) -> bool:
