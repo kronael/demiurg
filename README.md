@@ -91,11 +91,11 @@ ctrl+c kills child processes and exits cleanly (SIGINT/SIGTERM
 both handled). a lock file prevents concurrent runs on the same
 state dir.
 
-## planship
+## /ship skill
 
-the `planship` Claude Code skill (`~/.claude/skills/planship/`)
+the `/ship` Claude Code skill (`~/.claude/skills/ship/`)
 plans a project inside Claude, writes `specs/*.md`, then calls
-`ship` to execute. use `/planship <goal>` in Claude Code.
+`ship` to execute. use `/ship <goal>` in Claude Code.
 
 works incrementally: detects existing specs and shipped work,
 only plans and ships the delta.

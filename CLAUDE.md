@@ -8,7 +8,7 @@ autonomous agent orchestration. planner-worker-judge pattern.
 
 ```bash
 make build              # uv sync
-make install            # uv tool install
+make install            # uv tool install + skill
 make test               # pytest
 make lint               # pre-commit run -a
 make right              # pyright only
