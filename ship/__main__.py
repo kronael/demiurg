@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import logging
+import os
 import shutil
 import signal
 import sys
@@ -182,6 +183,8 @@ def run(
 
     Discovers SPEC.md by default, or pass files/dirs as args.
     """
+    os.environ.pop("CLAUDECODE", None)
+
     if show_log:
         _dump_log(verbose)
         sys.exit(0)
