@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import hashlib
+import importlib.metadata
 import json
 import logging
+import os
 import shutil
 import signal
 import sys
@@ -22,10 +24,8 @@ from ship.types_ import Task, TaskStatus
 from ship.validator import Validator
 from ship.worker import Worker
 
-SPEC_CANDIDATES = ["SPEC.md", "spec.md"]
 
-
-VERSION = "0.6.6"
+VERSION = importlib.metadata.version("ship")
 
 
 def _has_real_state(data_dir: Path) -> bool:
@@ -63,24 +63,15 @@ def _spec_slug(context: tuple[str, ...]) -> str | None:
 
 
 def discover_spec(context: tuple[str, ...]) -> list[Path]:
-    if context:
-        if len(context) == 1:
-            p = Path(context[0])
-            if p.is_file():
-                return [p]
-            if p.is_dir():
-                return sorted(p.glob("*.md"))
+    if not context:
         return []
-
-    found: list[Path] = []
-    for candidate in SPEC_CANDIDATES:
-        p = Path(candidate)
-        if p.exists():
-            found.append(p)
-    specs_dir = Path("specs")
-    if specs_dir.is_dir():
-        found.extend(sorted(specs_dir.glob("*.md")))
-    return found
+    if len(context) == 1:
+        p = Path(context[0])
+        if p.is_file():
+            return [p]
+        if p.is_dir():
+            return sorted(p.glob("*.md"))
+    return []
 
 
 def _dump_log(verbose: int) -> None:
@@ -182,6 +173,8 @@ def run(
 
     Discovers SPEC.md by default, or pass files/dirs as args.
     """
+    os.environ.pop("CLAUDECODE", None)
+
     if show_log:
         _dump_log(verbose)
         sys.exit(0)
@@ -438,7 +431,7 @@ async def _main(
             inline_context = list(context)
         else:
             display.error(
-                "error: no spec found (try SPEC.md, specs/*.md, or /planship)",
+                "error: no spec provided (usage: ship <file>)",
             )
             sys.exit(1)
 

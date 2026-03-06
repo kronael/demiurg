@@ -34,8 +34,7 @@ use `/ship <goal>` in Claude Code.
 ## usage
 
 ```bash
-ship                 # reads SPEC.md or specs/*.md
-ship spec.txt        # specify design file
+ship <file>          # ship from design file
 ship specs/          # ship from specs directory
 ship "add auth"      # inline goal text
 ship -f              # wipe state and start fresh
@@ -103,7 +102,7 @@ only plans and ships the delta.
 
 ## specs format
 
-ship reads `SPEC.md` or `specs/*.md`. each spec file should have
+ship reads the file or directory passed on the cmdline. each spec file should have
 deliverables with concrete acceptance criteria:
 
 ```markdown
