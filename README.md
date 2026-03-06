@@ -6,11 +6,30 @@ on the command line.
 ## install
 
 ```bash
-make install    # uv tool install
+uv tool install git+https://github.com/kronael/ship
+```
+
+or from source:
+
+```bash
+make install    # uv tool install + skill
 ```
 
 requires claude code CLI, authenticated. codex CLI optional
 (only for `-x` refiner).
+
+### claude code skill
+
+install the `/ship` skill so Claude Code can plan and
+execute autonomously:
+
+```bash
+mkdir -p ~/.claude/skills/ship
+cp skill/SKILL.md skill/prompt.md ~/.claude/skills/ship/
+```
+
+`make install` does this automatically. after installing,
+use `/ship <goal>` in Claude Code.
 
 ## usage
 

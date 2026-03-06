@@ -5,6 +5,8 @@ build:
 
 install:
 	uv tool install --editable .
+	mkdir -p ~/.claude/skills/ship
+	cp skill/SKILL.md skill/prompt.md ~/.claude/skills/ship/
 
 test:
 	uv run pytest -v
